@@ -69,3 +69,59 @@ void libgodot_destroy_godot_instance(GDExtensionObjectPtr p_godot_instance) {
 		Main::cleanup();
 	}
 }
+
+bool libgodot_start_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND_V(godot_instance == nullptr, false);
+
+	return godot_instance->start();
+}
+
+bool libgodot_is_godot_instance_started(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND_V(godot_instance == nullptr, false);
+
+	return godot_instance->is_started();
+}
+
+bool libgodot_iteration_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND_V(godot_instance == nullptr, false);
+
+	return godot_instance->iteration();
+}
+
+void libgodot_stop_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND(godot_instance == nullptr);
+
+	godot_instance->stop();
+}
+
+void libgodot_focus_in_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND(godot_instance == nullptr);
+
+	godot_instance->focus_in();
+}
+
+void libgodot_focus_out_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND(godot_instance == nullptr);
+
+	godot_instance->focus_out();
+}
+
+void libgodot_pause_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND(godot_instance == nullptr);
+
+	godot_instance->pause();
+}
+
+void libgodot_resume_godot_instance(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND(godot_instance == nullptr);
+
+	godot_instance->resume();
+}

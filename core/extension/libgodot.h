@@ -70,6 +70,46 @@ LIBGODOT_API GDExtensionObjectPtr libgodot_create_godot_instance(int p_argc, cha
  */
 LIBGODOT_API void libgodot_destroy_godot_instance(GDExtensionObjectPtr p_godot_instance);
 
+/**
+ * Sets up and starts the engine. If successful, it also initializes the main loop.
+ */
+LIBGODOT_API bool libgodot_start_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Returns whether the engine has already been started.
+ */
+LIBGODOT_API bool libgodot_is_godot_instance_started(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Runs one iteration of the engine: processes display events and updates the main loop.
+ */
+LIBGODOT_API bool libgodot_iteration_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Finalizes the main loop and stops the engine instance.
+ */
+LIBGODOT_API void libgodot_stop_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Sends a notification that the application has gained focus.
+ */
+LIBGODOT_API void libgodot_focus_in_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Sends a notification that the application has lost focus.
+ */
+LIBGODOT_API void libgodot_focus_out_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Sends a notification that the application has been paused.
+ */
+LIBGODOT_API void libgodot_pause_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Sends a notification that the application has resumed after being paused.
+ */
+LIBGODOT_API void libgodot_resume_godot_instance(GDExtensionObjectPtr p_godot_instance);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus
