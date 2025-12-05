@@ -350,7 +350,11 @@ X509CertificateMbedTLS *CryptoMbedTLS::get_default_certificates() {
 }
 
 void CryptoMbedTLS::load_default_certificates(const String &p_path) {
-	ERR_FAIL_COND(default_certs != nullptr);
+	// Allow reloading when embedding swaps projects without tearing down the engine.
+	if (default_certs != nullptr) {
+		memdelete(default_certs);
+		default_certs = nullptr;
+	}
 
 	default_certs = memnew(X509CertificateMbedTLS);
 	ERR_FAIL_NULL(default_certs);
