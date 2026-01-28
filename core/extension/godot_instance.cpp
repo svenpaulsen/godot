@@ -30,7 +30,9 @@
 
 #include "godot_instance.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/extension/gdextension.h"
 #include "core/extension/gdextension_manager.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
@@ -67,6 +69,79 @@ Error GodotInstance::_ensure_setup() {
 		setup_done = true;
 	}
 	return err;
+}
+
+void GodotInstance::load_project_extensions() {
+	if (Engine::get_singleton()->is_recovery_mode_hint()) {
+		return;
+	}
+
+	GDExtensionManager *ext_manager = GDExtensionManager::get_singleton();
+	if (!ext_manager) {
+		return;
+	}
+
+	// Snapshot currently loaded extensions before loading project extensions.
+	HashSet<String> pre_existing;
+	for (const String &path : ext_manager->get_loaded_extensions()) {
+		pre_existing.insert(path);
+	}
+
+	// Read and load extensions from the project's extension_list.cfg.
+	String config_path = GDExtension::get_extension_list_config_file();
+	Ref<FileAccess> f = FileAccess::open(config_path, FileAccess::READ);
+	while (f.is_valid() && !f->eof_reached()) {
+		String ext_path = f->get_line().strip_edges();
+		if (ext_path.is_empty()) {
+			continue;
+		}
+
+		GDExtensionManager::LoadStatus status = ext_manager->load_extension(ext_path);
+		if (status == GDExtensionManager::LOAD_STATUS_FAILED) {
+			ERR_PRINT(vformat("Error loading project extension: '%s'.", ext_path));
+			continue;
+		}
+
+		// Track only newly loaded extensions (not pre-existing).
+		if (status == GDExtensionManager::LOAD_STATUS_OK) {
+			// Resolve the path as it appears in the manager (may differ from config).
+			for (const String &loaded_path : ext_manager->get_loaded_extensions()) {
+				if (!pre_existing.has(loaded_path) && !project_loaded_extensions.has(loaded_path)) {
+					project_loaded_extensions.insert(loaded_path);
+				}
+			}
+		}
+	}
+
+	print_verbose(vformat("GodotInstance::load_project_extensions() loaded %d extention(s)", project_loaded_extensions.size()));
+}
+
+void GodotInstance::unload_project_extensions() {
+	if (Engine::get_singleton()->is_recovery_mode_hint()) {
+		return;
+	}
+
+	GDExtensionManager *ext_manager = GDExtensionManager::get_singleton();
+	if (!ext_manager) {
+		project_loaded_extensions.clear();
+		return;
+	}
+
+	print_verbose(vformat("GodotInstance::unload_project_extensions() unloading %d extention(s)", project_loaded_extensions.size()));
+
+	for (const String &ext_path : project_loaded_extensions) {
+		GDExtensionManager::LoadStatus status = ext_manager->unload_extension(ext_path);
+		if (status == GDExtensionManager::LOAD_STATUS_FAILED) {
+			ERR_PRINT(vformat("Error unloading project extension: '%s'.", ext_path));
+		} else if (status == GDExtensionManager::LOAD_STATUS_NOT_LOADED) {
+			// Already unloaded, not an error.
+			print_verbose(vformat("Project extension already unloaded: '%s'.", ext_path));
+		} else if (status == GDExtensionManager::LOAD_STATUS_NEEDS_RESTART) {
+			WARN_PRINT(vformat("Project extension requires restart to fully unload: '%s'.", ext_path));
+		}
+	}
+
+	project_loaded_extensions.clear();
 }
 
 bool GodotInstance::initialize(GDExtensionInitializationFunction p_init_func) {
@@ -131,6 +206,7 @@ bool GodotInstance::load_project(const String &p_path) {
 
 	// Clean up any running project before loading a new one.
 	Main::stop_project();
+	unload_project_extensions();
 
 	String project_dir = p_path;
 	String main_pack;
@@ -173,6 +249,8 @@ bool GodotInstance::load_project(const String &p_path) {
 		return false;
 	}
 
+	load_project_extensions();
+
 	current_project_path = p_path;
 	current_project_args.clear();
 	current_project_args.push_back(p_path);
@@ -190,6 +268,9 @@ void GodotInstance::unload_project() {
 	if (started || project_loaded) {
 		Main::stop_project();
 	}
+
+	unload_project_extensions();
+
 	started = false;
 	project_loaded = false;
 	current_project_path = String();

@@ -32,6 +32,7 @@
 
 #include "core/extension/gdextension_interface.gen.h"
 #include "core/object/class_db.h"
+#include "core/templates/hash_set.h"
 
 class GodotInstance : public Object {
 	GDCLASS(GodotInstance, Object);
@@ -41,6 +42,10 @@ class GodotInstance : public Object {
 	bool project_loaded = false;
 	String current_project_path;
 	Vector<String> current_project_args;
+	HashSet<String> project_loaded_extensions;
+
+	void load_project_extensions();
+	void unload_project_extensions();
 
 protected:
 	static void _bind_methods();
