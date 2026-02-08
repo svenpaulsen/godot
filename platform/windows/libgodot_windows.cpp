@@ -33,6 +33,7 @@
 #include "core/extension/godot_instance.h"
 #include "core/extension/libgodot.h"
 #include "main/main.h"
+#include "servers/display/display_server.h"
 
 static OS_Windows *os = nullptr;
 
@@ -145,4 +146,21 @@ bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance, const char *
 	ERR_FAIL_COND_V(p_project_path == nullptr, false);
 
 	return godot_instance->reload_project(String(p_project_path));
+}
+
+uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_window_id) {
+	DisplayServer *ds = DisplayServer::get_singleton();
+	if (ds == nullptr) {
+		return 0;
+	}
+
+	DisplayServerEnums::HandleType ht = static_cast<DisplayServerEnums::HandleType>(p_handle_type);
+	DisplayServerEnums::WindowID wid = static_cast<DisplayServerEnums::WindowID>(p_window_id);
+
+	int64_t native = ds->window_get_native_handle(ht, wid);
+	if (native == 0) {
+		return 0;
+	}
+
+	return static_cast<uint64_t>(native);
 }
