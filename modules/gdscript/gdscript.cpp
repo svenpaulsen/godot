@@ -49,13 +49,14 @@
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/core_constants.h"
+#include "core/extension/gdextension.h"
+#include "core/extension/gdextension_manager.h"
 #include "core/io/file_access.h"
 
 #include "scene/resources/packed_scene.h"
 #include "scene/scene_string_names.h"
 
 #ifdef TOOLS_ENABLED
-#include "core/extension/gdextension_manager.h"
 #include "editor/file_system/editor_paths.h"
 #endif
 
@@ -2125,12 +2126,8 @@ void GDScriptLanguage::init() {
 		_add_global(E.name, E.ptr);
 	}
 
-#ifdef TOOLS_ENABLED
-	if (Engine::get_singleton()->is_editor_hint()) {
-		GDExtensionManager::get_singleton()->connect("extension_loaded", callable_mp(this, &GDScriptLanguage::_extension_loaded));
-		GDExtensionManager::get_singleton()->connect("extension_unloading", callable_mp(this, &GDScriptLanguage::_extension_unloading));
-	}
-#endif // TOOLS_ENABLED
+	GDExtensionManager::get_singleton()->connect("extension_loaded", callable_mp(this, &GDScriptLanguage::_extension_loaded));
+	GDExtensionManager::get_singleton()->connect("extension_unloading", callable_mp(this, &GDScriptLanguage::_extension_unloading));
 
 #ifdef DEBUG_ENABLED
 	GDScriptParser::update_project_settings();
@@ -2144,12 +2141,15 @@ void GDScriptLanguage::init() {
 #endif // TESTS_ENABLED
 }
 
-#ifdef TOOLS_ENABLED
 void GDScriptLanguage::_extension_loaded(const Ref<GDExtension> &p_extension) {
+	// Add any new classes from the extension to the global map.
 	List<StringName> class_list;
-	ClassDB::get_extension_class_list(p_extension, &class_list);
+	ClassDB::get_class_list(&class_list);
 	for (const StringName &n : class_list) {
 		if (globals.has(n)) {
+			continue;
+		}
+		if (!ClassDB::is_class_exposed(n)) {
 			continue;
 		}
 		Ref<GDScriptNativeClass> nc = memnew(GDScriptNativeClass(n));
@@ -2158,13 +2158,23 @@ void GDScriptLanguage::_extension_loaded(const Ref<GDExtension> &p_extension) {
 }
 
 void GDScriptLanguage::_extension_unloading(const Ref<GDExtension> &p_extension) {
-	List<StringName> class_list;
-	ClassDB::get_extension_class_list(p_extension, &class_list);
-	for (const StringName &n : class_list) {
+	// Remove classes that are no longer in ClassDB.
+	// We iterate our globals and check if they still exist.
+	List<StringName> to_remove;
+	for (const KeyValue<StringName, int> &E : globals) {
+		if (global_array[E.value].get_type() == Variant::OBJECT) {
+			Object *obj = global_array[E.value];
+			if (Object::cast_to<GDScriptNativeClass>(obj)) {
+				if (!ClassDB::class_exists(E.key)) {
+					to_remove.push_back(E.key);
+				}
+			}
+		}
+	}
+	for (const StringName &n : to_remove) {
 		_remove_global(n);
 	}
 }
-#endif
 
 String GDScriptLanguage::get_type() const {
 	return "GDScript";

@@ -40,6 +40,8 @@
 #include "core/object/script_language.h"
 #include "core/templates/rb_set.h"
 
+class GDExtension;
+
 class GDScriptNativeClass : public RefCounted {
 	GDCLASS(GDScriptNativeClass, RefCounted);
 
@@ -466,10 +468,8 @@ class GDScriptLanguage : public ScriptLanguage {
 
 	HashMap<String, ObjectID> orphan_subclasses;
 
-#ifdef TOOLS_ENABLED
 	void _extension_loaded(const Ref<GDExtension> &p_extension);
 	void _extension_unloading(const Ref<GDExtension> &p_extension);
-#endif
 
 public:
 	bool debug_break(const String &p_error, bool p_allow_continue = true);
