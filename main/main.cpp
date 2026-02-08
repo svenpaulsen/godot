@@ -299,6 +299,7 @@ bool profile_gpu = false;
 
 static const String NULL_DISPLAY_DRIVER("headless");
 static const String EMBEDDED_DISPLAY_DRIVER("embedded");
+static const String EXTERNAL_DISPLAY_DRIVER("external");
 static const String NULL_AUDIO_DRIVER("Dummy");
 
 // The length of the longest column in the command-line help we should align to

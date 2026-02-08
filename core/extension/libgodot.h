@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_interface.gen.h"
+#include "core/extension/libgodot_display_server.h"
 
 #ifdef __cplusplus
 extern "C" {
