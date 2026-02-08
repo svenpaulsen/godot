@@ -40,6 +40,26 @@
 #if defined(METAL_ENABLED)
 #include "drivers/metal/rendering_context_driver_metal.h"
 #endif
+
+#if defined(VULKAN_ENABLED)
+// Note: macOS Vulkan is not supported in DisplayServerExternal because it requires
+// Objective-C++ compilation. Use Metal on macOS instead (preferred API).
+#if defined(WINDOWS_ENABLED)
+#include "platform/windows/rendering_context_driver_vulkan_windows.h"
+#elif defined(LINUXBSD_ENABLED)
+#ifdef X11_ENABLED
+#include "platform/linuxbsd/x11/rendering_context_driver_vulkan_x11.h"
+#endif
+#ifdef WAYLAND_ENABLED
+#include "platform/linuxbsd/wayland/rendering_context_driver_vulkan_wayland.h"
+#endif
+#endif
+#endif // VULKAN_ENABLED
+
+#if defined(D3D12_ENABLED)
+#include "drivers/d3d12/rendering_context_driver_d3d12.h"
+#endif
+
 #endif // RD_ENABLED
 
 #if defined(GLES3_ENABLED)
@@ -83,8 +103,12 @@ DisplayServer *DisplayServerExternal::create_func(const String &p_rendering_driv
 
 Vector<String> DisplayServerExternal::get_rendering_drivers_func() {
 	Vector<String> drivers;
-#if defined(VULKAN_ENABLED)
+#if defined(VULKAN_ENABLED) && !defined(MACOS_ENABLED)
+	// Note: Vulkan on macOS requires Objective-C++, use Metal instead
 	drivers.push_back("vulkan");
+#endif
+#if defined(D3D12_ENABLED)
+	drivers.push_back("d3d12");
 #endif
 #if defined(METAL_ENABLED)
 	drivers.push_back("metal");
@@ -701,9 +725,35 @@ DisplayServerExternal::DisplayServerExternal(const String &p_rendering_driver, W
 	}
 
 #if defined(RD_ENABLED)
+	// Create the appropriate rendering context based on the driver and platform
 #if defined(METAL_ENABLED)
 	if (rendering_driver == "metal") {
 		rendering_context = memnew(RenderingContextDriverMetal);
+	}
+#endif
+
+#if defined(VULKAN_ENABLED)
+	// Note: Vulkan on macOS requires Objective-C++, use Metal instead
+#if !defined(MACOS_ENABLED)
+	if (rendering_driver == "vulkan") {
+#if defined(WINDOWS_ENABLED)
+		rendering_context = memnew(RenderingContextDriverVulkanWindows);
+#elif defined(LINUXBSD_ENABLED)
+#if defined(X11_ENABLED)
+		// For now, default to X11 for Linux. Wayland support would require
+		// additional logic to detect which display server is in use.
+		rendering_context = memnew(RenderingContextDriverVulkanX11);
+#elif defined(WAYLAND_ENABLED)
+		rendering_context = memnew(RenderingContextDriverVulkanWayland);
+#endif
+#endif
+	}
+#endif // !MACOS_ENABLED
+#endif // VULKAN_ENABLED
+
+#if defined(D3D12_ENABLED)
+	if (rendering_driver == "d3d12") {
+		rendering_context = memnew(RenderingContextDriverD3D12);
 	}
 #endif
 
@@ -717,13 +767,71 @@ DisplayServerExternal::DisplayServerExternal(const String &p_rendering_driver, W
 	}
 
 	if (rendering_context) {
-		// Create a window with the external layer
-#ifdef METAL_ENABLED
-		RenderingContextDriverMetal::WindowPlatformData wpd;
-		wpd.layer = native_layer;
+		// Create a window with the external layer using platform-specific data
+		union {
+#if defined(METAL_ENABLED)
+			RenderingContextDriverMetal::WindowPlatformData metal;
 #endif
-		Error err = rendering_context->window_create(MAIN_WINDOW_ID, &wpd);
+#if defined(VULKAN_ENABLED) && !defined(MACOS_ENABLED)
+#if defined(WINDOWS_ENABLED)
+			RenderingContextDriverVulkanWindows::WindowPlatformData vulkan_windows;
+#elif defined(LINUXBSD_ENABLED)
+#if defined(X11_ENABLED)
+			RenderingContextDriverVulkanX11::WindowPlatformData vulkan_x11;
+#endif
+#if defined(WAYLAND_ENABLED)
+			RenderingContextDriverVulkanWayland::WindowPlatformData vulkan_wayland;
+#endif
+#endif
+#endif // VULKAN_ENABLED && !MACOS_ENABLED
+#if defined(D3D12_ENABLED)
+			RenderingContextDriverD3D12::WindowPlatformData d3d12;
+#endif
+		} wpd;
+
+		Error err = ERR_UNAVAILABLE;
+
+#if defined(METAL_ENABLED)
+		if (rendering_driver == "metal") {
+			wpd.metal.layer = (CA::MetalLayer *)native_layer;
+			err = rendering_context->window_create(MAIN_WINDOW_ID, &wpd);
+		}
+#endif
+
+#if defined(VULKAN_ENABLED) && !defined(MACOS_ENABLED)
+		if (rendering_driver == "vulkan") {
+#if defined(WINDOWS_ENABLED)
+			wpd.vulkan_windows.window = (HWND)native_layer;
+			wpd.vulkan_windows.instance = GetModuleHandle(nullptr);
+			err = rendering_context->window_create(MAIN_WINDOW_ID, &wpd);
+#elif defined(LINUXBSD_ENABLED)
+#if defined(X11_ENABLED)
+			// For X11, native_layer is the X11 Window, we also need the display
+			wpd.vulkan_x11.window = (::Window)(uintptr_t)native_layer;
+			void *x11_display = interface->get_native_handle(interface->user_data, LIBGODOT_HANDLE_DISPLAY, MAIN_WINDOW_ID);
+			wpd.vulkan_x11.display = (::Display *)x11_display;
+			err = rendering_context->window_create(MAIN_WINDOW_ID, &wpd);
+#elif defined(WAYLAND_ENABLED)
+			// For Wayland, native_layer is the wl_surface
+			void *wayland_display = interface->get_native_handle(interface->user_data, LIBGODOT_HANDLE_DISPLAY, MAIN_WINDOW_ID);
+			wpd.vulkan_wayland.surface = (struct wl_surface *)native_layer;
+			wpd.vulkan_wayland.display = (struct wl_display *)wayland_display;
+			err = rendering_context->window_create(MAIN_WINDOW_ID, &wpd);
+#endif
+#endif
+		}
+#endif // VULKAN_ENABLED && !MACOS_ENABLED
+
+#if defined(D3D12_ENABLED)
+		if (rendering_driver == "d3d12") {
+			wpd.d3d12.window = (HWND)native_layer;
+			err = rendering_context->window_create(MAIN_WINDOW_ID, &wpd);
+		}
+#endif
+
 		if (err != OK) {
+			memdelete(rendering_context);
+			rendering_context = nullptr;
 			r_error = ERR_CANT_CREATE;
 			ERR_FAIL_MSG(vformat("Can't create a %s window", rendering_driver));
 		}
