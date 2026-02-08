@@ -33,6 +33,7 @@
 
 #include "core/input/input.h"
 #include "scene/resources/texture.h"
+#include "servers/display/display_server_external.h"
 #include "servers/display/display_server_headless.h"
 
 #if defined(VULKAN_ENABLED)
@@ -56,10 +57,11 @@ bool DisplayServer::window_early_clear_override_enabled = false;
 Color DisplayServer::window_early_clear_override_color = Color(0, 0, 0, 0);
 
 DisplayServer::DisplayServerCreate DisplayServer::server_create_functions[DisplayServer::MAX_SERVERS] = {
+	{ "external", &DisplayServerExternal::create_func, &DisplayServerExternal::get_rendering_drivers_func },
 	{ "headless", &DisplayServerHeadless::create_func, &DisplayServerHeadless::get_rendering_drivers_func }
 };
 
-int DisplayServer::server_create_count = 1;
+int DisplayServer::server_create_count = 2;
 
 void DisplayServer::help_set_search_callbacks(const Callable &p_search_callback, const Callable &p_action_callback) {
 	WARN_PRINT("Native help is not supported by this display server.");
