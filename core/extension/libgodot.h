@@ -127,6 +127,16 @@ LIBGODOT_API void libgodot_unload_project(GDExtensionObjectPtr p_godot_instance)
  */
 LIBGODOT_API bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance, const char *p_project_path);
 
+/**
+ * Returns the native window handle for a given handle type and window ID.
+ *
+ * @param p_handle_type The type of handle to retrieve (DisplayServer::HandleType as int32_t).
+ * @param p_window_id The window ID (DisplayServer::WindowID as int32_t).
+ *
+ * @return The native handle as uint64_t, or 0 if not available.
+ */
+LIBGODOT_API uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_window_id);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

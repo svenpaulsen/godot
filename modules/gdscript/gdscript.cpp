@@ -2143,8 +2143,8 @@ void GDScriptLanguage::init() {
 
 void GDScriptLanguage::_extension_loaded(const Ref<GDExtension> &p_extension) {
 	// Add any new classes from the extension to the global map.
-	List<StringName> class_list;
-	ClassDB::get_class_list(&class_list);
+	LocalVector<StringName> class_list;
+	ClassDB::get_class_list(class_list);
 	for (const StringName &n : class_list) {
 		if (globals.has(n)) {
 			continue;
