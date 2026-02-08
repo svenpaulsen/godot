@@ -37,9 +37,14 @@ class GodotInstance : public Object {
 	GDCLASS(GodotInstance, Object);
 
 	bool started = false;
+	bool setup_done = false;
+	bool project_loaded = false;
+	String current_project_path;
+	Vector<String> current_project_args;
 
 protected:
 	static void _bind_methods();
+	Error _ensure_setup();
 
 public:
 	GodotInstance();
@@ -51,6 +56,9 @@ public:
 	bool is_started();
 	bool iteration();
 	void stop();
+	bool load_project(const String &p_path);
+	void unload_project();
+	bool reload_project(const String &p_path);
 
 	void focus_out();
 	void focus_in();

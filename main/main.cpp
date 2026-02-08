@@ -46,6 +46,8 @@
 #include "core/io/file_access_zip.h"
 #include "core/io/image.h"
 #include "core/io/image_loader.h"
+#include "core/io/ip.h"
+#include "core/io/resource.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
 #include "core/object/class_db.h"
@@ -1028,7 +1030,7 @@ int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
  *   in help, it's a bit messy and should be globalized with the setup() parsing somehow.
  */
 
-Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
+Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase, bool p_allow_no_project) {
 	GodotProfileZone("setup");
 	Thread::make_main_thread();
 	set_current_thread_safe_for_nodes(true);
@@ -1154,6 +1156,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	// Exit error code used in the `goto error` conditions.
 	// It's returned as the program exit code. ERR_HELP is special cased and handled as success (0).
 	Error exit_err = ERR_INVALID_PARAMETER;
+	Error project_setup_err = OK;
 
 	I = args.front();
 	while (I) {
@@ -2100,7 +2103,8 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #endif // defined(DEBUG_ENABLED) || defined (TOOLS_ENABLED)
 
 	OS::get_singleton()->_in_editor = editor;
-	if (globals->setup(project_path, main_pack, false, editor) == OK) {
+	project_setup_err = globals->setup(project_path, main_pack, false, editor);
+	if (project_setup_err == OK) {
 #ifdef TOOLS_ENABLED
 		found_project = true;
 #endif
@@ -2108,27 +2112,30 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #ifdef TOOLS_ENABLED
 		editor = false;
 #else
-		String error_msg = "Error: Couldn't load project data at path \"" + (project_path == "." ? OS::get_singleton()->get_cwd() : project_path) + "\". Is the .pck file missing?\n\n";
+		if (!p_allow_no_project) {
+			String error_msg = "Error: Couldn't load project data at path \"" + (project_path == "." ? OS::get_singleton()->get_cwd() : project_path) + "\". Is the .pck file missing?\n\n";
 #if !defined(OVERRIDE_PATH_ENABLED) && !defined(TOOLS_ENABLED)
-		String exec_path = OS::get_singleton()->get_executable_path();
-		String exec_basename = exec_path.get_file().get_basename();
+			String exec_path = OS::get_singleton()->get_executable_path();
+			String exec_basename = exec_path.get_file().get_basename();
 
-		if (FileAccess::exists(old_cwd.path_join(exec_basename + ".pck"))) {
-			error_msg += "\"" + exec_basename + ".pck\" was found in the current working directory. To be able to load a project from the CWD, use the `disable_path_overrides=no` SCons option when compiling Godot.\n";
-		} else if (FileAccess::exists(old_cwd.path_join("project.godot"))) {
-			error_msg += "\"project.godot\" was found in the current working directory. To be able to load a project from the CWD, use the `disable_path_overrides=no` SCons option when compiling Godot.\n";
-		} else {
-			error_msg += "If you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
-		}
+			if (FileAccess::exists(old_cwd.path_join(exec_basename + ".pck"))) {
+				error_msg += "\"" + exec_basename + ".pck\" was found in the current working directory. To be able to load a project from the CWD, use the `disable_path_overrides=no` SCons option when compiling Godot.\n";
+			} else if (FileAccess::exists(old_cwd.path_join("project.godot"))) {
+				error_msg += "\"project.godot\" was found in the current working directory. To be able to load a project from the CWD, use the `disable_path_overrides=no` SCons option when compiling Godot.\n";
+			} else {
+				error_msg += "If you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
+			}
 #else
-		error_msg += "If you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
+			error_msg += "If you've renamed the executable, the associated .pck file should also be renamed to match the executable's name (without the extension).\n";
 #endif
-		ERR_PRINT(error_msg);
+			ERR_PRINT(error_msg);
 
-		OS::get_singleton()->alert(error_msg);
+			OS::get_singleton()->alert(error_msg);
 
-		goto error;
+			goto error;
+		}
 #endif
+		// When embedding via libgodot, allow running without a project and continue with defaults.
 	}
 
 	// Initialize WorkerThreadPool.
@@ -4004,14 +4011,80 @@ String Main::get_locale_override() {
 // everything the main loop needs to know about frame timings
 static MainTimerSync main_timer_sync;
 
+void Main::reset_project_state() {
+	use_debug_profiler = false;
+#ifdef DEBUG_ENABLED
+	debug_collisions = false;
+	debug_paths = false;
+	debug_navigation = false;
+	debug_avoidance = false;
+	debug_canvas_item_redraw = false;
+	debug_mute_audio = false;
+#endif
+	max_fps = -1;
+	frame_delay = 0;
+	audio_output_latency = 0;
+	disable_render_loop = false;
+	fixed_fps = -1;
+	disable_vsync = false;
+	print_fps = false;
+	profile_gpu = false;
+	single_threaded_scene = false;
+	quit_after = 0;
+
+	// Reset per-run counters so a fresh project starts cleanly.
+	last_ticks = 0;
+	frames = 0;
+	frame = 0;
+	hide_print_fps_attempts = 3;
+	force_redraw_requested = false;
+	iterating = 0;
+}
+
+void Main::stop_project() {
+	// Stop and destroy the current main loop if any.
+	SceneTree *tree = Object::cast_to<SceneTree>(OS::get_singleton()->get_main_loop());
+	if (tree) {
+		tree->quit();
+	}
+	if (OS::get_singleton()->get_main_loop()) {
+		OS::get_singleton()->get_main_loop()->finalize();
+	}
+	OS::get_singleton()->delete_main_loop();
+
+	// Clear per-project state that is recreated on the next start().
+	if (message_queue) {
+		message_queue->flush();
+	}
+
+	ResourceLoader::clear_thread_load_tasks();
+	ResourceLoader::remove_custom_loaders();
+	ResourceSaver::remove_custom_savers();
+	PropertyListHelper::clear_base_helpers();
+	ResourceLoader::clear_translation_remaps();
+
+	// Reset counters for the next project run.
+	main_timer_sync.init(OS::get_singleton()->get_ticks_usec());
+	last_ticks = 0;
+	frames = 0;
+	frame = 0;
+	hide_print_fps_attempts = 3;
+	force_redraw_requested = false;
+	iterating = 0;
+}
+
 // Return value should be EXIT_SUCCESS if we start successfully
 // and should move on to `OS::run`, and EXIT_FAILURE otherwise for
 // an early exit with that error code.
-int Main::start() {
+int Main::start(const Vector<String> &p_cmdline_override, bool p_reset_state) {
 	GodotProfileZone("start");
 	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Start");
 
 	ERR_FAIL_COND_V(!_start_success, EXIT_FAILURE);
+
+	if (p_reset_state) {
+		reset_project_state();
+	}
 
 	bool has_icon = false;
 	String positional_arg;
@@ -4040,7 +4113,15 @@ int Main::start() {
 #endif // TOOLS_ENABLED
 
 	main_timer_sync.init(OS::get_singleton()->get_ticks_usec());
-	List<String> args = OS::get_singleton()->get_cmdline_args();
+
+	List<String> args;
+	if (p_cmdline_override.is_empty()) {
+		args = OS::get_singleton()->get_cmdline_args();
+	} else {
+		for (const String &arg : p_cmdline_override) {
+			args.push_back(arg);
+		}
+	}
 
 	for (List<String>::Element *E = args.front(); E; E = E->next()) {
 		// First check parameters that do not have an argument to the right.
