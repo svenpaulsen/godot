@@ -111,6 +111,22 @@ LIBGODOT_API void libgodot_pause_godot_instance(GDExtensionObjectPtr p_godot_ins
  */
 LIBGODOT_API void libgodot_resume_godot_instance(GDExtensionObjectPtr p_godot_instance);
 
+/**
+ * Loads and starts a Godot project from the given path (project folder or .pck).
+ * The engine must have been created with libgodot_create_godot_instance() first.
+ */
+LIBGODOT_API bool libgodot_load_project(GDExtensionObjectPtr p_godot_instance, const char *p_project_path);
+
+/**
+ * Stops the currently running project and frees its resources without tearing down the engine.
+ */
+LIBGODOT_API void libgodot_unload_project(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Convenience helper to stop the current project (if any) and load the next one.
+ */
+LIBGODOT_API bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance, const char *p_project_path);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

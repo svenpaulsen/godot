@@ -31,10 +31,9 @@
 #pragma once
 
 #include "core/os/thread.h"
+#include "core/string/ustring.h"
+#include "core/templates/vector.h"
 #include "core/typedefs.h"
-
-template <typename T>
-class Vector;
 
 class Main {
 	enum CLIOptionAvailability {
@@ -69,7 +68,7 @@ public:
 #endif
 
 	static int test_entrypoint(int argc, char *argv[], bool &tests_need_run);
-	static Error setup(const char *execpath, int argc, char *argv[], bool p_second_phase = true);
+	static Error setup(const char *execpath, int argc, char *argv[], bool p_second_phase = true, bool p_allow_no_project = false);
 	static Error setup2(bool p_show_boot_logo = true); // The thread calling setup2() will effectively become the main thread.
 	static String get_rendering_driver_name();
 	static String get_locale_override();
@@ -78,7 +77,11 @@ public:
 	static Error test_setup();
 	static void test_cleanup();
 #endif
-	static int start();
+	static int start(const Vector<String> &p_cmdline_override = Vector<String>(), bool p_reset_state = false);
+
+	// Project-scoped lifecycle helpers to allow reloading without tearing down the whole engine.
+	static void stop_project();
+	static void reset_project_state();
 
 	static bool iteration();
 	static void force_redraw();

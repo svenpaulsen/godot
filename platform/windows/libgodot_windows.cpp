@@ -44,7 +44,7 @@ GDExtensionObjectPtr libgodot_create_godot_instance(int p_argc, char *p_argv[], 
 
 	os = new OS_Windows(GetModuleHandle(nullptr));
 
-	Error err = Main::setup(p_argv[0], p_argc - 1, &p_argv[1], false);
+	Error err = Main::setup(p_argv[0], p_argc - 1, &p_argv[1], false, true);
 	if (err != OK) {
 		return nullptr;
 	}
@@ -64,8 +64,7 @@ void libgodot_destroy_godot_instance(GDExtensionObjectPtr p_godot_instance) {
 	if (instance == godot_instance) {
 		godot_instance->stop();
 		memdelete(godot_instance);
-		// Note: When Godot Engine supports reinitialization, clear the instance pointer here.
-		//instance = nullptr;
+		instance = nullptr;
 		Main::cleanup();
 	}
 }
@@ -124,4 +123,27 @@ void libgodot_resume_godot_instance(GDExtensionObjectPtr p_godot_instance) {
 	ERR_FAIL_COND(godot_instance == nullptr);
 
 	godot_instance->resume();
+}
+
+bool libgodot_load_project(GDExtensionObjectPtr p_godot_instance, const char *p_project_path) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND_V(godot_instance == nullptr, false);
+	ERR_FAIL_COND_V(p_project_path == nullptr, false);
+
+	return godot_instance->load_project(String(p_project_path));
+}
+
+void libgodot_unload_project(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND(godot_instance == nullptr);
+
+	godot_instance->unload_project();
+}
+
+bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance, const char *p_project_path) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND_V(godot_instance == nullptr, false);
+	ERR_FAIL_COND_V(p_project_path == nullptr, false);
+
+	return godot_instance->reload_project(String(p_project_path));
 }

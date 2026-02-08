@@ -51,5 +51,25 @@
 				Finishes this instance's startup sequence. Returns [code]true[/code] on success.
 			</description>
 		</method>
+		<method name="load_project">
+			<return type="bool" />
+			<argument index="0" name="path" type="String" />
+			<description>
+				Loads and starts a project at the given folder or [code].pck[/code] path. If another project is running it will be stopped first.
+			</description>
+		</method>
+		<method name="unload_project">
+			<return type="void" />
+			<description>
+				Stops the currently running project and frees its resources while keeping the engine initialized.
+			</description>
+		</method>
+		<method name="reload_project">
+			<return type="bool" />
+			<argument index="0" name="path" type="String" />
+			<description>
+				Convenience helper that unloads the current project (if any) and loads the one at [code]path[/code].
+			</description>
+		</method>
 	</methods>
 </class>

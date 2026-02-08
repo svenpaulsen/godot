@@ -30,7 +30,10 @@
 
 #include "godot_instance.h"
 
+#include "core/config/project_settings.h"
 #include "core/extension/gdextension_manager.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 #include "core/os/main_loop.h"
 #include "main/main.h"
 #include "servers/display/display_server.h"
@@ -43,12 +46,27 @@ void GodotInstance::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("focus_out"), &GodotInstance::focus_out);
 	ClassDB::bind_method(D_METHOD("pause"), &GodotInstance::pause);
 	ClassDB::bind_method(D_METHOD("resume"), &GodotInstance::resume);
+	ClassDB::bind_method(D_METHOD("load_project", "path"), &GodotInstance::load_project);
+	ClassDB::bind_method(D_METHOD("unload_project"), &GodotInstance::unload_project);
+	ClassDB::bind_method(D_METHOD("reload_project", "path"), &GodotInstance::reload_project);
 }
 
 GodotInstance::GodotInstance() {
 }
 
 GodotInstance::~GodotInstance() {
+}
+
+Error GodotInstance::_ensure_setup() {
+	if (setup_done) {
+		return OK;
+	}
+
+	Error err = Main::setup2();
+	if (err == OK) {
+		setup_done = true;
+	}
+	return err;
 }
 
 bool GodotInstance::initialize(GDExtensionInitializationFunction p_init_func) {
@@ -61,13 +79,22 @@ bool GodotInstance::initialize(GDExtensionInitializationFunction p_init_func) {
 
 bool GodotInstance::start() {
 	print_verbose("GodotInstance::start()");
-	Error err = Main::setup2();
-	if (err != OK) {
+	if (_ensure_setup() != OK) {
 		return false;
 	}
-	started = Main::start() == EXIT_SUCCESS;
+
+	// If a project was preloaded via load_project(), ignore the original command line to avoid
+	// reusing stale arguments (like a previous --path) on subsequent runs.
+	if (!current_project_args.is_empty()) {
+		Main::stop_project();
+		started = Main::start(current_project_args, true) == EXIT_SUCCESS;
+	} else {
+		started = Main::start() == EXIT_SUCCESS;
+	}
+
 	if (started) {
 		OS::get_singleton()->get_main_loop()->initialize();
+		project_loaded = true;
 	}
 	return started;
 }
@@ -77,16 +104,101 @@ bool GodotInstance::is_started() {
 }
 
 bool GodotInstance::iteration() {
+	if (!started || OS::get_singleton()->get_main_loop() == nullptr) {
+		return true;
+	}
+
 	DisplayServer::get_singleton()->process_events();
 	return Main::iteration();
 }
 
 void GodotInstance::stop() {
 	print_verbose("GodotInstance::stop()");
-	if (started) {
-		OS::get_singleton()->get_main_loop()->finalize();
+	if (started || project_loaded) {
+		Main::stop_project();
 	}
 	started = false;
+	project_loaded = false;
+}
+
+bool GodotInstance::load_project(const String &p_path) {
+	print_verbose("GodotInstance::load_project()");
+	ERR_FAIL_COND_V(p_path.is_empty(), false);
+
+	if (_ensure_setup() != OK) {
+		return false;
+	}
+
+	// Clean up any running project before loading a new one.
+	Main::stop_project();
+
+	String project_dir = p_path;
+	String main_pack;
+	if (project_dir.ends_with(".pck")) {
+		main_pack = project_dir;
+		project_dir = ".";
+	}
+
+	bool has_project_file = FileAccess::exists(project_dir.path_join("project.godot"));
+	print_verbose(vformat("GodotInstance::load_project() dir=%s pck=%s pro=%d res=%s", project_dir, main_pack, has_project_file, ProjectSettings::get_singleton()->get_resource_path()));
+
+	Ref<DirAccess> project_da = DirAccess::open(project_dir);
+	if (project_da.is_null()) {
+		ERR_PRINT(vformat("Project directory does not exist: %s", project_dir));
+		return false;
+	}
+
+	project_dir = project_da->get_current_dir();
+	if (!project_da->file_exists(project_dir.path_join("project.godot")) && !project_da->file_exists(project_dir.path_join("project.binary"))) {
+		ERR_PRINT(vformat("No project.godot or project.binary found in %s", project_dir));
+		return false;
+	}
+
+	Ref<DirAccess> cwd_da = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
+	if (cwd_da.is_null()) {
+		ERR_PRINT("Failed to create DirAccess for filesystem");
+		return false;
+	}
+	Error chdir_err = cwd_da->change_dir(project_dir);
+	if (chdir_err != OK) {
+		ERR_PRINT(vformat("Failed to change directory to %s, error %d", project_dir, chdir_err));
+		return false;
+	}
+
+	ProjectSettings::get_singleton()->set_resource_path(project_dir);
+
+	Error err = ProjectSettings::get_singleton()->setup(project_dir, main_pack, true, false);
+	if (err != OK) {
+		ERR_PRINT(vformat("Failed to setup project at %s with error code %d", project_dir, err));
+		return false;
+	}
+
+	current_project_path = p_path;
+	current_project_args.clear();
+	current_project_args.push_back(p_path);
+
+	started = Main::start(current_project_args, true) == EXIT_SUCCESS;
+	project_loaded = started;
+	if (started && OS::get_singleton()->get_main_loop()) {
+		OS::get_singleton()->get_main_loop()->initialize();
+	}
+	return started;
+}
+
+void GodotInstance::unload_project() {
+	print_verbose("GodotInstance::unload_project()");
+	if (started || project_loaded) {
+		Main::stop_project();
+	}
+	started = false;
+	project_loaded = false;
+	current_project_path = String();
+	current_project_args.clear();
+}
+
+bool GodotInstance::reload_project(const String &p_path) {
+	unload_project();
+	return load_project(p_path);
 }
 
 void GodotInstance::focus_out() {
