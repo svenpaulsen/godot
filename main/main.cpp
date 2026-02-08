@@ -77,6 +77,7 @@
 #include "servers/camera/camera_server.h"
 #include "servers/display/accessibility_server.h"
 #include "servers/display/display_server.h"
+#include "servers/display/display_server_external.h"
 #include "servers/movie_writer/movie_writer.h"
 #include "servers/register_server_types.h"
 #include "servers/rendering/rendering_device.h"
@@ -3254,9 +3255,18 @@ Error Main::setup2(bool p_show_boot_logo) {
 		}
 
 		int display_driver_idx = -1;
+		const auto is_display_driver_available = [](const String &p_name) -> bool {
+			return p_name != EXTERNAL_DISPLAY_DRIVER || DisplayServerExternal::has_interface();
+		};
 
 		if (display_driver.is_empty() || display_driver == "default") {
-			display_driver_idx = 0;
+			for (int i = 0; i < DisplayServer::get_create_function_count(); i++) {
+				String name = DisplayServer::get_create_function_name(i);
+				if (is_display_driver_available(name)) {
+					display_driver_idx = i;
+					break;
+				}
+			}
 		} else {
 			for (int i = 0; i < DisplayServer::get_create_function_count(); i++) {
 				String name = DisplayServer::get_create_function_name(i);
@@ -3267,10 +3277,19 @@ Error Main::setup2(bool p_show_boot_logo) {
 			}
 
 			if (display_driver_idx < 0) {
-				// If the requested driver wasn't found, pick the first entry.
-				// If all else failed it would be the headless server.
-				display_driver_idx = 0;
+				for (int i = 0; i < DisplayServer::get_create_function_count(); i++) {
+					String name = DisplayServer::get_create_function_name(i);
+					if (is_display_driver_available(name)) {
+						display_driver_idx = i;
+						break;
+					}
+				}
 			}
+		}
+
+		if (display_driver_idx < 0) {
+			// If all else failed it would be the headless server.
+			display_driver_idx = 0;
 		}
 
 		Vector2i *window_position = nullptr;
@@ -3381,6 +3400,9 @@ Error Main::setup2(bool p_show_boot_logo) {
 					continue; // Don't try the same twice.
 				}
 				String name = DisplayServer::get_create_function_name(i);
+				if (!is_display_driver_available(name)) {
+					continue; // Skip unavailable drivers such as external without an interface.
+				}
 				WARN_PRINT(vformat("Display driver %s failed, falling back to %s.", last_name, name));
 
 				display_server = DisplayServer::create(i, rendering_driver, window_mode, window_vsync_mode, window_flags, window_position, window_size, init_screen, context, init_embed_parent_window_id, err);
