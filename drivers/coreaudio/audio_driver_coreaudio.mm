@@ -33,6 +33,7 @@
 #ifdef COREAUDIO_ENABLED
 
 #include "core/config/project_settings.h"
+#include "core/math/math_funcs.h"
 #include "core/os/os.h"
 
 #define kOutputBus 0
@@ -243,7 +244,30 @@ OSStatus AudioDriverCoreAudio::input_callback(void *inRefCon,
 	bufferList.mNumberBuffers = 1;
 	bufferList.mBuffers[0].mData = ad->input_buf.ptrw();
 	bufferList.mBuffers[0].mNumberChannels = ad->capture_channels;
-	bufferList.mBuffers[0].mDataByteSize = ad->input_buf.size() * sizeof(int16_t);
+	const uint32_t requested_samples = inNumberFrames * ad->capture_channels;
+	const uint32_t available_samples = ad->input_buf.size();
+	const uint32_t requested_bytes = requested_samples * sizeof(int16_t);
+	const uint32_t available_bytes = available_samples * sizeof(int16_t);
+
+	if (requested_samples > available_samples) {
+		// Not enough buffer space for this render slice; skip the render call.
+		const OSStatus result = -50; // paramErr
+		const uint64_t now = OS::get_singleton() ? OS::get_singleton()->get_ticks_usec() : 0;
+		const uint64_t min_log_interval_usec = 1000000; // 1s
+		if (ad->last_input_render_error != result || (now != 0 && (now - ad->last_input_render_error_log_time_usec) >= min_log_interval_usec)) {
+			ERR_PRINT("AudioUnitRender skipped (buffer too small), inNumberFrames=" + itos(inNumberFrames) +
+					" channels=" + itos(ad->capture_channels) +
+					" requested_bytes=" + itos(requested_bytes) +
+					" available_bytes=" + itos(available_bytes));
+			ad->last_input_render_error = result;
+			ad->last_input_render_error_log_time_usec = now;
+		}
+		ad->stop_counting_ticks();
+		ad->unlock();
+		return result;
+	}
+
+	bufferList.mBuffers[0].mDataByteSize = requested_bytes;
 
 	OSStatus result = AudioUnitRender(ad->input_unit, ioActionFlags, inTimeStamp, inBusNumber, inNumberFrames, &bufferList);
 	if (result == noErr) {
@@ -257,7 +281,14 @@ OSStatus AudioDriverCoreAudio::input_callback(void *inRefCon,
 			}
 		}
 	} else {
-		ERR_PRINT("AudioUnitRender failed, code: " + itos(result));
+		// Rate-limit repeated failures to avoid spamming logs from the realtime callback.
+		const uint64_t now = OS::get_singleton() ? OS::get_singleton()->get_ticks_usec() : 0;
+		const uint64_t min_log_interval_usec = 1000000; // 1s
+		if (ad->last_input_render_error != result || (now != 0 && (now - ad->last_input_render_error_log_time_usec) >= min_log_interval_usec)) {
+			ERR_PRINT("AudioUnitRender failed, code: " + itos(result));
+			ad->last_input_render_error = result;
+			ad->last_input_render_error_log_time_usec = now;
+		}
 	}
 
 	ad->stop_counting_ticks();
@@ -441,10 +472,10 @@ Error AudioDriverCoreAudio::init_input_device() {
 	result = AudioObjectGetPropertyData(device_id, &property_sr, 0, nullptr, &hw_mix_rate_size, &hw_mix_rate);
 	ERR_FAIL_COND_V(result != noErr, FAILED);
 
-	capture_mix_rate = mix_rate;
+	capture_mix_rate = (int)Math::round(hw_mix_rate);
 
 	if (abs(hw_mix_rate - mix_rate) > 1.0) {
-		WARN_PRINT("CoreAudio: Input device hardware rate (" + rtos(hw_mix_rate) + " Hz) differs from output mix rate (" + itos(mix_rate) + " Hz). Forcing input to " + itos(mix_rate) + " Hz to avoid sample rate mismatch.");
+		WARN_PRINT("CoreAudio: Input device hardware rate (" + rtos(hw_mix_rate) + " Hz) differs from output mix rate (" + itos(mix_rate) + " Hz). Capturing at hardware rate and resampling internally.");
 	}
 #else
 	double hw_mix_rate = [AVAudioSession sharedInstance].sampleRate;
@@ -468,7 +499,18 @@ Error AudioDriverCoreAudio::init_input_device() {
 	// Sample rate is independent of channels (ref: https://stackoverflow.com/questions/11048825/audio-sample-frequency-rely-on-channels)
 	capture_buffer_frames = closest_power_of_2(latency * (uint32_t)capture_mix_rate / (uint32_t)1000);
 
-	buffer_size = capture_buffer_frames * capture_channels;
+	UInt32 max_frames_per_slice = 0;
+	UInt32 max_frames_per_slice_size = sizeof(max_frames_per_slice);
+	result = AudioUnitGetProperty(input_unit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &max_frames_per_slice, &max_frames_per_slice_size);
+	if (result != noErr || max_frames_per_slice == 0) {
+		max_frames_per_slice = capture_buffer_frames;
+	}
+
+	// CoreAudio can request more frames per callback than our latency-derived buffer size,
+	// especially at low capture sample rates. Keep the render buffer large enough.
+	const uint32_t render_frames = MAX(MAX(capture_buffer_frames, buffer_frames), (uint32_t)max_frames_per_slice);
+
+	buffer_size = render_frames * capture_channels;
 	input_buf.resize(buffer_size);
 
 	AURenderCallbackStruct callback;

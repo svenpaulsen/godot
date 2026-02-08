@@ -62,6 +62,9 @@ class AudioDriverCoreAudio : public AudioDriver {
 	Vector<int16_t> input_buf;
 	unsigned int buffer_size = 0;
 
+	OSStatus last_input_render_error = noErr;
+	uint64_t last_input_render_error_log_time_usec = 0;
+
 #ifdef MACOS_ENABLED
 	PackedStringArray _get_device_list(bool capture = false);
 	void _set_device(const String &output_device, bool capture = false);
