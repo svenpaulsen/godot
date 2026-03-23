@@ -148,6 +148,9 @@ void GodotInstance::unload_project_extensions() {
 
 bool GodotInstance::initialize(GDExtensionInitializationFunction p_init_func) {
 	print_verbose("Godot Instance initialization");
+	if (!p_init_func) {
+		return true;
+	}
 	GDExtensionManager *gdextension_manager = GDExtensionManager::get_singleton();
 	GDExtensionConstPtr<const GDExtensionInitializationFunction> ptr((const GDExtensionInitializationFunction *)&p_init_func);
 	GDExtensionManager::LoadStatus status = gdextension_manager->load_extension_from_function("libgodot://main", ptr);

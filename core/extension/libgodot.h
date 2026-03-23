@@ -46,6 +46,21 @@ extern "C" {
 #define LIBGODOT_API
 #endif
 
+typedef enum {
+	LIBGODOT_LOG_LEVEL_INFO = 0,
+	LIBGODOT_LOG_LEVEL_WARNING = 1,
+	LIBGODOT_LOG_LEVEL_ERROR = 2,
+} LibGodotLogLevel;
+
+/**
+ * Callback type for receiving engine log messages.
+ *
+ * @param p_user_data User data pointer passed to libgodot_set_log_callback.
+ * @param p_level The severity level of the message.
+ * @param p_message The log message as a UTF-8 string.
+ */
+typedef void (*LibGodotLogCallback)(void *p_user_data, LibGodotLogLevel p_level, const char *p_message);
+
 /**
  * @name libgodot_create_godot_instance
  * @since 4.6
@@ -54,7 +69,9 @@ extern "C" {
  *
  * @param p_argc The number of command line arguments.
  * @param p_argv The C-style array of command line arguments.
- * @param p_init_func GDExtension initialization function of the host application.
+ * @param p_init_func Optional GDExtension initialization function for registering custom
+ *        native classes/types with the engine. Pass NULL if you just want to run a project
+ *        without extending the engine from the host application.
  *
  * @return A pointer to created \ref GodotInstance GDExtension object or nullptr if there was an error.
  */
@@ -136,6 +153,18 @@ LIBGODOT_API bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance,
  * @return The native handle as uint64_t, or 0 if not available.
  */
 LIBGODOT_API uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_window_id);
+
+/**
+ * Sets a callback to receive engine log messages (print, warning, error).
+ * Can be called before libgodot_create_godot_instance() to capture early messages.
+ * Only one callback may be active at a time; setting a new one replaces the previous.
+ * When a callback is set, the engine's default stdout/stderr output is suppressed.
+ * Passing NULL restores normal console output.
+ *
+ * @param p_callback The callback function, or NULL to remove and restore console output.
+ * @param p_user_data Opaque pointer forwarded to the callback.
+ */
+LIBGODOT_API void libgodot_set_log_callback(LibGodotLogCallback p_callback, void *p_user_data);
 
 #ifdef __cplusplus
 }
