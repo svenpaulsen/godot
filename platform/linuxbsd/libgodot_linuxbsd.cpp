@@ -31,6 +31,7 @@
 #include "core/extension/libgodot.h"
 
 #include "core/extension/godot_instance.h"
+#include "core/extension/libgodot_log.h"
 #include "main/main.h"
 #include "servers/display/display_server.h"
 
@@ -44,6 +45,7 @@ GDExtensionObjectPtr libgodot_create_godot_instance(int p_argc, char *p_argv[], 
 	ERR_FAIL_COND_V_MSG(instance != nullptr, nullptr, "Only one Godot Instance may be created.");
 
 	os = new OS_LinuxBSD();
+	_libgodot_apply_log_stdout();
 
 	Error err = Main::setup(p_argv[0], p_argc - 1, &p_argv[1], false, true);
 	if (err != OK) {
@@ -165,4 +167,8 @@ uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_wind
 	}
 
 	return static_cast<uint64_t>(native);
+}
+
+void libgodot_set_log_callback(LibGodotLogCallback p_callback, void *p_user_data) {
+	_libgodot_set_log_callback_impl(p_callback, p_user_data);
 }

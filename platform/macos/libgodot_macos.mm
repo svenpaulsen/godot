@@ -31,6 +31,7 @@
 #include "core/extension/libgodot.h"
 
 #include "core/extension/godot_instance.h"
+#include "core/extension/libgodot_log.h"
 #include "main/main.h"
 #include "servers/display/display_server.h"
 
@@ -45,6 +46,7 @@ GDExtensionObjectPtr libgodot_create_godot_instance(int p_argc, char *p_argv[], 
 
 	uint32_t remaining_args = p_argc - 1;
 	os = new OS_MacOS_NSApp(p_argv[0], remaining_args, remaining_args > 0 ? &p_argv[1] : nullptr);
+	_libgodot_apply_log_stdout();
 
 	@autoreleasepool {
 		Error err = Main::setup(p_argv[0], remaining_args, remaining_args > 0 ? &p_argv[1] : nullptr, false, true);
@@ -167,4 +169,8 @@ uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_wind
 	}
 
 	return static_cast<uint64_t>(native);
+}
+
+void libgodot_set_log_callback(LibGodotLogCallback p_callback, void *p_user_data) {
+	_libgodot_set_log_callback_impl(p_callback, p_user_data);
 }
