@@ -66,6 +66,11 @@
 #include "drivers/gles3/rasterizer_gles3.h"
 #endif
 
+// X11 headers define CursorShape as a macro, which conflicts with DisplayServer::CursorShape.
+#ifdef CursorShape
+#undef CursorShape
+#endif
+
 // Static interface pointer
 LibGodotDisplayServerInterface *DisplayServerExternal::interface = nullptr;
 
