@@ -129,7 +129,7 @@ Vector<String> DisplayServerExternal::get_rendering_drivers_func() {
 // ============================================================================
 
 BitField<KeyModifierMask> DisplayServerExternal::_WrapModifiers(unsigned int p_modifiers) {
-	BitField<KeyModifierMask> modifiers;
+	BitField<KeyModifierMask> modifiers = {};
 	if (p_modifiers & LIBGODOT_KEY_MOD_SHIFT) {
 		modifiers.set_flag(KeyModifierMask::SHIFT);
 	}
@@ -146,7 +146,7 @@ BitField<KeyModifierMask> DisplayServerExternal::_WrapModifiers(unsigned int p_m
 }
 
 BitField<MouseButtonMask> DisplayServerExternal::_WrapButtonMask(unsigned int p_button_mask) {
-	BitField<MouseButtonMask> mask;
+	BitField<MouseButtonMask> mask = {};
 	if (p_button_mask & LIBGODOT_MOUSE_BUTTON_LEFT) {
 		mask.set_flag(MouseButtonMask::LEFT);
 	}
