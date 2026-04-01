@@ -66,6 +66,11 @@
 #include "drivers/gles3/rasterizer_gles3.h"
 #endif
 
+// X11 headers define CursorShape as a macro, which conflicts with DisplayServerEnums::CursorShape.
+#ifdef CursorShape
+#undef CursorShape
+#endif
+
 // DisplayServer enums/typedefs (WindowID, WindowMode, CursorShape, ...) live in the
 // DisplayServerEnums namespace since 4.7; pull them in for the implementation below.
 using namespace DisplayServerEnums;
