@@ -71,6 +71,12 @@
 #undef CursorShape
 #endif
 
+// Windows COM headers define 'interface' as a macro for 'struct',
+// which conflicts with the 'interface' member variable.
+#ifdef interface
+#undef interface
+#endif
+
 // Static interface pointer
 LibGodotDisplayServerInterface *DisplayServerExternal::interface = nullptr;
 
