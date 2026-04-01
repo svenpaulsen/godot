@@ -177,6 +177,13 @@ void libgodot_set_log_callback(LibGodotLogCallback p_callback, void *p_user_data
 	_libgodot_set_log_callback_impl(p_callback, p_user_data);
 }
 
+bool libgodot_warmup(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	ERR_FAIL_COND_V(godot_instance == nullptr, false);
+
+	return godot_instance->warmup();
+}
+
 LibGodotStatus libgodot_get_status(GDExtensionObjectPtr p_godot_instance) {
 	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
 	if (godot_instance == nullptr) {

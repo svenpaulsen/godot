@@ -56,13 +56,14 @@ typedef enum {
 	LIBGODOT_STATUS_UNINITIALIZED = 0,
 	LIBGODOT_STATUS_CORE_READY = 1,
 	LIBGODOT_STATUS_SERVERS_READY = 2,
-	LIBGODOT_STATUS_PROJECT_LOADING = 3,
-	LIBGODOT_STATUS_RUNNING = 4,
-	LIBGODOT_STATUS_PROJECT_UNLOADING = 5,
-	LIBGODOT_STATUS_IDLE = 6,
-	LIBGODOT_STATUS_STOPPING = 7,
-	LIBGODOT_STATUS_STOPPED = 8,
-	LIBGODOT_STATUS_ERROR = 9,
+	LIBGODOT_STATUS_WARMING_UP = 3,
+	LIBGODOT_STATUS_PROJECT_LOADING = 4,
+	LIBGODOT_STATUS_RUNNING = 5,
+	LIBGODOT_STATUS_PROJECT_UNLOADING = 6,
+	LIBGODOT_STATUS_IDLE = 7,
+	LIBGODOT_STATUS_STOPPING = 8,
+	LIBGODOT_STATUS_STOPPED = 9,
+	LIBGODOT_STATUS_ERROR = 10,
 } LibGodotStatus;
 
 /**
@@ -175,6 +176,22 @@ LIBGODOT_API bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance,
  * @return The native handle as uint64_t, or 0 if not available.
  */
 LIBGODOT_API uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_window_id);
+
+/**
+ * Pre-compiles all built-in engine shaders (Metal, Vulkan, D3D12) asynchronously.
+ * Ensures servers are initialized (calls _ensure_setup if needed), then dispatches
+ * all embedded shader variant compilations to background worker threads.
+ *
+ * Status transitions: CORE_READY -> SERVERS_READY -> WARMING_UP -> IDLE.
+ * The transition from WARMING_UP to IDLE happens automatically when all shader
+ * compilations complete. Monitor progress with libgodot_get_shader_compilations_pending().
+ *
+ * Call this after libgodot_create_godot_instance() and before libgodot_load_project()
+ * to avoid shader compilation stalls during the first rendered frames.
+ *
+ * @return true if warmup was successfully started, false on error.
+ */
+LIBGODOT_API bool libgodot_warmup(GDExtensionObjectPtr p_godot_instance);
 
 /**
  * Returns the number of shader compilation tasks currently in progress.

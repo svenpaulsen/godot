@@ -66,6 +66,8 @@ public:
 	void unload_project();
 	bool reload_project(const String &p_path);
 
+	bool warmup();
+
 	LibGodotStatus get_status() const;
 
 	void focus_out();

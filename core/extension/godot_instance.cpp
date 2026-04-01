@@ -37,7 +37,9 @@
 #include "core/extension/libgodot_status.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/main_loop.h"
+#include "core/os/os.h"
 #include "main/main.h"
 #include "servers/display/display_server.h"
 #include "servers/rendering/renderer_rd/shader_rd.h"
@@ -349,6 +351,32 @@ void GodotInstance::resume() {
 			OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_RESUMED);
 		}
 	}
+}
+
+static void _warmup_monitor_task(void *p_userdata) {
+	while (ShaderRD::get_shader_compilations_pending() > 0) {
+		OS::get_singleton()->delay_usec(10000); // 10ms poll
+	}
+	// Only transition if still in WARMING_UP (not interrupted by load_project/stop).
+	if (_libgodot_get_status() == LIBGODOT_STATUS_WARMING_UP) {
+		_libgodot_set_status(LIBGODOT_STATUS_IDLE, nullptr);
+	}
+}
+
+bool GodotInstance::warmup() {
+	print_verbose("GodotInstance::warmup()");
+	if (_ensure_setup() != OK) {
+		return false;
+	}
+
+	_libgodot_set_status(LIBGODOT_STATUS_WARMING_UP, "Compiling shaders");
+	ShaderRD::reset_shader_compilation_counters();
+	ShaderRD::warmup_all_embedded();
+
+	// Spawn a background task to monitor completion and transition to IDLE.
+	WorkerThreadPool::get_singleton()->add_native_task(_warmup_monitor_task, nullptr, false, SNAME("ShaderWarmupMonitor"));
+
+	return true;
 }
 
 LibGodotStatus GodotInstance::get_status() const {
