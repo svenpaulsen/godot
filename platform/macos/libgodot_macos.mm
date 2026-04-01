@@ -32,8 +32,10 @@
 
 #include "core/extension/godot_instance.h"
 #include "core/extension/libgodot_log.h"
+#include "core/extension/libgodot_status.h"
 #include "main/main.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/renderer_rd/shader_rd.h"
 
 #include "os_macos.h"
 
@@ -58,9 +60,11 @@ GDExtensionObjectPtr libgodot_create_godot_instance(int p_argc, char *p_argv[], 
 		if (!instance->initialize(p_init_func)) {
 			memdelete(instance);
 			instance = nullptr;
+			_libgodot_set_status(LIBGODOT_STATUS_ERROR, "GDExtension initialization failed");
 			return nullptr;
 		}
 
+		_libgodot_set_status(LIBGODOT_STATUS_CORE_READY, nullptr);
 		return (GDExtensionObjectPtr)instance;
 	}
 }
@@ -173,4 +177,24 @@ uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_wind
 
 void libgodot_set_log_callback(LibGodotLogCallback p_callback, void *p_user_data) {
 	_libgodot_set_log_callback_impl(p_callback, p_user_data);
+}
+
+LibGodotStatus libgodot_get_status(GDExtensionObjectPtr p_godot_instance) {
+	GodotInstance *godot_instance = (GodotInstance *)p_godot_instance;
+	if (godot_instance == nullptr) {
+		return _libgodot_get_status();
+	}
+	return godot_instance->get_status();
+}
+
+void libgodot_set_status_callback(LibGodotStatusCallback p_callback, void *p_user_data) {
+	_libgodot_set_status_callback_impl(p_callback, p_user_data);
+}
+
+int32_t libgodot_get_shader_compilations_pending() {
+	return ShaderRD::get_shader_compilations_pending();
+}
+
+int32_t libgodot_get_shader_compilations_total() {
+	return ShaderRD::get_shader_compilations_total();
 }

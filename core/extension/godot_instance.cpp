@@ -34,11 +34,13 @@
 #include "core/config/project_settings.h"
 #include "core/extension/gdextension.h"
 #include "core/extension/gdextension_manager.h"
+#include "core/extension/libgodot_status.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/os/main_loop.h"
 #include "main/main.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/renderer_rd/shader_rd.h"
 
 void GodotInstance::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("start"), &GodotInstance::start);
@@ -64,9 +66,13 @@ Error GodotInstance::_ensure_setup() {
 		return OK;
 	}
 
+	_libgodot_set_status(LIBGODOT_STATUS_SERVERS_READY, "Initializing servers");
 	Error err = Main::setup2();
 	if (err == OK) {
 		setup_done = true;
+		_libgodot_set_status(LIBGODOT_STATUS_IDLE, nullptr);
+	} else {
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Server initialization failed");
 	}
 	return err;
 }
@@ -161,6 +167,9 @@ bool GodotInstance::start() {
 		return false;
 	}
 
+	_libgodot_set_status(LIBGODOT_STATUS_PROJECT_LOADING, "Starting project");
+	ShaderRD::reset_shader_compilation_counters();
+
 	// If a project was preloaded via load_project(), ignore the original command line to avoid
 	// reusing stale arguments (like a previous --path) on subsequent runs.
 	if (!current_project_args.is_empty()) {
@@ -173,6 +182,9 @@ bool GodotInstance::start() {
 	if (started) {
 		OS::get_singleton()->get_main_loop()->initialize();
 		project_loaded = true;
+		_libgodot_set_status(LIBGODOT_STATUS_RUNNING, nullptr);
+	} else {
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Project start failed");
 	}
 	return started;
 }
@@ -192,11 +204,13 @@ bool GodotInstance::iteration() {
 
 void GodotInstance::stop() {
 	print_verbose("GodotInstance::stop()");
+	_libgodot_set_status(LIBGODOT_STATUS_STOPPING, nullptr);
 	if (started || project_loaded) {
 		Main::stop_project();
 	}
 	started = false;
 	project_loaded = false;
+	_libgodot_set_status(LIBGODOT_STATUS_STOPPED, nullptr);
 }
 
 bool GodotInstance::load_project(const String &p_path) {
@@ -206,6 +220,9 @@ bool GodotInstance::load_project(const String &p_path) {
 	if (_ensure_setup() != OK) {
 		return false;
 	}
+
+	_libgodot_set_status(LIBGODOT_STATUS_PROJECT_LOADING, "Preparing project");
+	ShaderRD::reset_shader_compilation_counters();
 
 	// Clean up any running project before loading a new one.
 	Main::stop_project();
@@ -224,36 +241,44 @@ bool GodotInstance::load_project(const String &p_path) {
 	Ref<DirAccess> project_da = DirAccess::open(project_dir);
 	if (project_da.is_null()) {
 		ERR_PRINT(vformat("Project directory does not exist: %s", project_dir));
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Project directory does not exist");
 		return false;
 	}
 
 	project_dir = project_da->get_current_dir();
 	if (!project_da->file_exists(project_dir.path_join("project.godot")) && !project_da->file_exists(project_dir.path_join("project.binary"))) {
 		ERR_PRINT(vformat("No project.godot or project.binary found in %s", project_dir));
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "No project file found");
 		return false;
 	}
 
 	Ref<DirAccess> cwd_da = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
 	if (cwd_da.is_null()) {
 		ERR_PRINT("Failed to create DirAccess for filesystem");
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Failed to create DirAccess");
 		return false;
 	}
 	Error chdir_err = cwd_da->change_dir(project_dir);
 	if (chdir_err != OK) {
 		ERR_PRINT(vformat("Failed to change directory to %s, error %d", project_dir, chdir_err));
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Failed to change directory");
 		return false;
 	}
 
+	_libgodot_set_status(LIBGODOT_STATUS_PROJECT_LOADING, "Loading project settings");
 	ProjectSettings::get_singleton()->set_resource_path(project_dir);
 
 	Error err = ProjectSettings::get_singleton()->setup(project_dir, main_pack, true, false);
 	if (err != OK) {
 		ERR_PRINT(vformat("Failed to setup project at %s with error code %d", project_dir, err));
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Failed to setup project settings");
 		return false;
 	}
 
+	_libgodot_set_status(LIBGODOT_STATUS_PROJECT_LOADING, "Loading extensions");
 	load_project_extensions();
 
+	_libgodot_set_status(LIBGODOT_STATUS_PROJECT_LOADING, "Starting main scene");
 	current_project_path = p_path;
 	current_project_args.clear();
 	current_project_args.push_back(p_path);
@@ -262,12 +287,16 @@ bool GodotInstance::load_project(const String &p_path) {
 	project_loaded = started;
 	if (started && OS::get_singleton()->get_main_loop()) {
 		OS::get_singleton()->get_main_loop()->initialize();
+		_libgodot_set_status(LIBGODOT_STATUS_RUNNING, nullptr);
+	} else {
+		_libgodot_set_status(LIBGODOT_STATUS_ERROR, "Failed to start project");
 	}
 	return started;
 }
 
 void GodotInstance::unload_project() {
 	print_verbose("GodotInstance::unload_project()");
+	_libgodot_set_status(LIBGODOT_STATUS_PROJECT_UNLOADING, nullptr);
 	if (started || project_loaded) {
 		Main::stop_project();
 	}
@@ -278,6 +307,7 @@ void GodotInstance::unload_project() {
 	project_loaded = false;
 	current_project_path = String();
 	current_project_args.clear();
+	_libgodot_set_status(LIBGODOT_STATUS_IDLE, nullptr);
 }
 
 bool GodotInstance::reload_project(const String &p_path) {
@@ -319,4 +349,8 @@ void GodotInstance::resume() {
 			OS::get_singleton()->get_main_loop()->notification(MainLoop::NOTIFICATION_APPLICATION_RESUMED);
 		}
 	}
+}
+
+LibGodotStatus GodotInstance::get_status() const {
+	return _libgodot_get_status();
 }
