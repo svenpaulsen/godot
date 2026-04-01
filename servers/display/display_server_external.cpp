@@ -71,6 +71,12 @@
 #undef CursorShape
 #endif
 
+// Windows COM headers define 'interface' as a macro for 'struct',
+// which conflicts with the 'interface' member variable.
+#ifdef interface
+#undef interface
+#endif
+
 // DisplayServer enums/typedefs (WindowID, WindowMode, CursorShape, ...) live in the
 // DisplayServerEnums namespace since 4.7; pull them in for the implementation below.
 using namespace DisplayServerEnums;
