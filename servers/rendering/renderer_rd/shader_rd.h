@@ -37,10 +37,21 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_types.h"
 
+#include <atomic>
+
 class StringBuilder;
 
 class ShaderRD {
+	static inline std::atomic<int32_t> shader_compilations_pending{ 0 };
+	static inline std::atomic<int32_t> shader_compilations_total{ 0 };
+
 public:
+	static int32_t get_shader_compilations_pending() { return shader_compilations_pending.load(std::memory_order_relaxed); }
+	static int32_t get_shader_compilations_total() { return shader_compilations_total.load(std::memory_order_relaxed); }
+	static void reset_shader_compilation_counters() {
+		shader_compilations_pending.store(0, std::memory_order_relaxed);
+		shader_compilations_total.store(0, std::memory_order_relaxed);
+	}
 	struct VariantDefine {
 		int group = 0;
 		CharString text;

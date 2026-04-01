@@ -52,6 +52,28 @@ typedef enum {
 	LIBGODOT_LOG_LEVEL_ERROR = 2,
 } LibGodotLogLevel;
 
+typedef enum {
+	LIBGODOT_STATUS_UNINITIALIZED = 0,
+	LIBGODOT_STATUS_CORE_READY = 1,
+	LIBGODOT_STATUS_SERVERS_READY = 2,
+	LIBGODOT_STATUS_PROJECT_LOADING = 3,
+	LIBGODOT_STATUS_RUNNING = 4,
+	LIBGODOT_STATUS_PROJECT_UNLOADING = 5,
+	LIBGODOT_STATUS_IDLE = 6,
+	LIBGODOT_STATUS_STOPPING = 7,
+	LIBGODOT_STATUS_STOPPED = 8,
+	LIBGODOT_STATUS_ERROR = 9,
+} LibGodotStatus;
+
+/**
+ * Callback type for receiving engine status changes.
+ *
+ * @param p_user_data User data pointer passed to libgodot_set_status_callback.
+ * @param p_status The new engine status.
+ * @param p_detail Optional detail string (UTF-8) describing the sub-phase, or NULL.
+ */
+typedef void (*LibGodotStatusCallback)(void *p_user_data, LibGodotStatus p_status, const char *p_detail);
+
 /**
  * Callback type for receiving engine log messages.
  *
@@ -153,6 +175,33 @@ LIBGODOT_API bool libgodot_reload_project(GDExtensionObjectPtr p_godot_instance,
  * @return The native handle as uint64_t, or 0 if not available.
  */
 LIBGODOT_API uint64_t libgodot_window_get_native_handle(int32_t p_handle_type, int32_t p_window_id);
+
+/**
+ * Returns the number of shader compilation tasks currently in progress.
+ * Returns 0 when all currently requested shaders have been compiled.
+ * Note: new shaders may be triggered at any time when new materials or effects are first used.
+ */
+LIBGODOT_API int32_t libgodot_get_shader_compilations_pending(void);
+
+/**
+ * Returns the total number of shader variants compiled since the last load_project().
+ */
+LIBGODOT_API int32_t libgodot_get_shader_compilations_total(void);
+
+/**
+ * Returns the current engine lifecycle status.
+ */
+LIBGODOT_API LibGodotStatus libgodot_get_status(GDExtensionObjectPtr p_godot_instance);
+
+/**
+ * Sets a callback to receive engine status changes.
+ * Only one callback may be active at a time; setting a new one replaces the previous.
+ * Passing NULL removes the callback.
+ *
+ * @param p_callback The callback function, or NULL to remove.
+ * @param p_user_data Opaque pointer forwarded to the callback.
+ */
+LIBGODOT_API void libgodot_set_status_callback(LibGodotStatusCallback p_callback, void *p_user_data);
 
 /**
  * Sets a callback to receive engine log messages (print, warning, error).

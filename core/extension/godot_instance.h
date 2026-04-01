@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_interface.gen.h"
+#include "core/extension/libgodot.h"
 #include "core/object/class_db.h"
 #include "core/object/object.h"
 #include "core/templates/hash_set.h"
@@ -65,6 +66,8 @@ public:
 	bool load_project(const String &p_path);
 	void unload_project();
 	bool reload_project(const String &p_path);
+
+	LibGodotStatus get_status() const;
 
 	void focus_out();
 	void focus_in();

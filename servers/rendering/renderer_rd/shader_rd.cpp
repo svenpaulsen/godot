@@ -722,6 +722,7 @@ void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
 #if ENABLE_SHADER_CACHE
 	if (shader_cache_user_dir_valid || shader_cache_res_dir_valid) {
 		if (_load_from_cache(p_version, p_group)) {
+			shader_compilations_total.fetch_add(group_to_variant_map[p_group].size(), std::memory_order_relaxed);
 			return;
 		}
 	}
@@ -731,7 +732,10 @@ void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
 	compile_data.version = p_version;
 	compile_data.group = p_group;
 
-	WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &ShaderRD::_compile_variant, compile_data, group_to_variant_map[p_group].size(), -1, true, SNAME("ShaderCompilation"));
+	int variant_count = group_to_variant_map[p_group].size();
+	shader_compilations_pending.fetch_add(variant_count, std::memory_order_relaxed);
+
+	WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &ShaderRD::_compile_variant, compile_data, variant_count, -1, true, SNAME("ShaderCompilation"));
 	p_version->group_compilation_tasks.write[p_group] = group_task;
 }
 
@@ -742,6 +746,10 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 	WorkerThreadPool::GroupID group_task = p_version->group_compilation_tasks[p_group];
 	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 	p_version->group_compilation_tasks.write[p_group] = 0;
+
+	int variant_count = group_to_variant_map[p_group].size();
+	shader_compilations_pending.fetch_sub(variant_count, std::memory_order_relaxed);
+	shader_compilations_total.fetch_add(variant_count, std::memory_order_relaxed);
 
 	bool all_valid = true;
 
