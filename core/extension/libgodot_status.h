@@ -41,11 +41,15 @@
  *
  * The status follows this state machine:
  *
- *   create_instance()       _ensure_setup()          load_project() / start()
- *   UNINITIALIZED ──► CORE_READY ──► SERVERS_READY ──► PROJECT_LOADING ──► RUNNING
- *                          │                ▲                                  │
- *                          │                │       unload_project()           │
- *                          │                └── IDLE ◄── PROJECT_UNLOADING ◄──┘
+ *   create_instance()       _ensure_setup()
+ *   UNINITIALIZED ──► CORE_READY ──► SERVERS_READY ─┬─► warmup() ──► WARMING_UP ──► IDLE
+ *                          │                         │                                │
+ *                          │                         └─► load_project() / start() ◄───┘
+ *                          │                                    │
+ *                          │                              PROJECT_LOADING ──► RUNNING
+ *                          │                                    ▲                 │
+ *                          │                                    │  unload()       │
+ *                          │                                    └── IDLE ◄── PROJECT_UNLOADING
  *                          │
  *                          └──► ERROR  (on any failure)
  *
@@ -65,8 +69,15 @@
  *   SERVERS_READY     — Main::setup2() completed. All servers are initialized:
  *                       display (window), rendering (Metal/Vulkan/D3D12),
  *                       audio, physics, input, text, and scene types.
- *                       The engine is ready to load a project.
- *                       Equivalent to IDLE on first entry.
+ *                       The engine is ready for warmup or to load a project.
+ *
+ *   WARMING_UP        — Built-in engine shaders are being pre-compiled in
+ *                       background worker threads. This avoids stalls during
+ *                       the first rendered frames after loading a project.
+ *                       Monitor progress with libgodot_get_shader_compilations_pending().
+ *                       Automatically transitions to IDLE when all compilations finish.
+ *                       Works cross-platform: Metal (macOS), Vulkan (Linux/Windows),
+ *                       D3D12 (Windows) all use the same ShaderRD pipeline.
  *
  *   PROJECT_LOADING   — A project is being loaded via load_project() or start().
  *                       Sub-phases reported via the detail string include:
@@ -75,7 +86,7 @@
  *
  *   RUNNING           — The main loop is initialized and the project is active.
  *                       Call libgodot_iteration_godot_instance() to drive frames.
- *                       Shader compilation happens lazily during early frames;
+ *                       Some project-specific shaders may still compile lazily;
  *                       use libgodot_get_shader_compilations_pending() to monitor.
  *
  *   PROJECT_UNLOADING — The current project is being torn down via unload_project().

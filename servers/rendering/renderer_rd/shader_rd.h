@@ -238,6 +238,12 @@ public:
 		return version->variants[p_variant];
 	}
 
+	// Kick off async compilation for all enabled groups of a version without blocking.
+	void version_warmup(RID p_version);
+
+	// Trigger async compilation of all embedded shader versions.
+	static void warmup_all_embedded();
+
 	bool version_is_valid(RID p_version);
 
 	bool version_free(RID p_version);

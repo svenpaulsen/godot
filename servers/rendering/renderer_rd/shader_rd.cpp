@@ -406,20 +406,31 @@ Vector<String> ShaderRD::_build_variant_stage_sources(uint32_t p_variant, Compil
 void ShaderRD::_compile_variant(uint32_t p_variant, CompileData p_data) {
 	uint32_t variant = group_to_variant_map[p_data.group][p_variant];
 	if (!variants_enabled[variant]) {
+		shader_compilations_pending.fetch_sub(1, std::memory_order_relaxed);
+		shader_compilations_total.fetch_add(1, std::memory_order_relaxed);
 		return; // Variant is disabled, return.
 	}
 
 	Vector<String> variant_stage_sources = _build_variant_stage_sources(variant, p_data);
 	Vector<RD::ShaderStageSPIRVData> variant_stages = compile_stages(variant_stage_sources, dynamic_buffers);
-	ERR_FAIL_COND(variant_stages.is_empty());
+	if (variant_stages.is_empty()) {
+		shader_compilations_pending.fetch_sub(1, std::memory_order_relaxed);
+		ERR_FAIL_COND(variant_stages.is_empty());
+	}
 
 	Vector<uint8_t> shader_data = RD::get_singleton()->shader_compile_binary_from_spirv(variant_stages, name + ":" + itos(variant));
-	ERR_FAIL_COND(shader_data.is_empty());
+	if (shader_data.is_empty()) {
+		shader_compilations_pending.fetch_sub(1, std::memory_order_relaxed);
+		ERR_FAIL_COND(shader_data.is_empty());
+	}
 
 	{
 		p_data.version->variants.write[variant] = RD::get_singleton()->shader_create_from_bytecode_with_samplers(shader_data, p_data.version->variants[variant], immutable_samplers);
 		p_data.version->variant_data.write[variant] = shader_data;
 	}
+
+	shader_compilations_pending.fetch_sub(1, std::memory_order_relaxed);
+	shader_compilations_total.fetch_add(1, std::memory_order_relaxed);
 }
 
 Vector<String> ShaderRD::version_build_variant_stage_sources(RID p_version, int p_variant) {
@@ -747,10 +758,6 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 	p_version->group_compilation_tasks.write[p_group] = 0;
 
-	int variant_count = group_to_variant_map[p_group].size();
-	shader_compilations_pending.fetch_sub(variant_count, std::memory_order_relaxed);
-	shader_compilations_total.fetch_add(variant_count, std::memory_order_relaxed);
-
 	bool all_valid = true;
 
 	for (uint32_t i = 0; i < group_to_variant_map[p_group].size(); i++) {
@@ -867,6 +874,32 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 	version->uniforms = p_uniforms.utf8();
 
 	_version_set(version, p_code, p_custom_defines);
+}
+
+void ShaderRD::version_warmup(RID p_version) {
+	Version *version = version_owner.get_or_null(p_version);
+	ERR_FAIL_NULL(version);
+
+	MutexLock lock(*version->mutex);
+
+	if (version->dirty) {
+		_initialize_version(version);
+		for (int i = 0; i < group_enabled.size(); i++) {
+			if (!group_enabled[i]) {
+				_allocate_placeholders(version, i);
+				continue;
+			}
+			_compile_version_start(version, i);
+		}
+	}
+	// Does NOT call _compile_version_end — compilation continues in background.
+}
+
+void ShaderRD::warmup_all_embedded() {
+	MutexLock lock(shader_versions_embedded_set_mutex);
+	for (const ShaderVersionPair &pair : shader_versions_embedded_set) {
+		pair.first->version_warmup(pair.second);
+	}
 }
 
 bool ShaderRD::version_is_valid(RID p_version) {
