@@ -306,6 +306,7 @@ opts.Add(
         ("executable", "static_library", "shared_library"),
     )
 )
+opts.Add(BoolVariable("no_suffix", "Omit platform/target/arch suffix from output library name", False))
 
 # Thirdparty libraries
 opts.Add(BoolVariable("builtin_brotli", "Use the built-in Brotli library", True))
@@ -1006,24 +1007,27 @@ else:  # GCC, Clang
     if env["werror"]:
         env.AppendUnique(CCFLAGS=["-Werror"])
 
-if hasattr(detect, "get_program_suffix"):
-    suffix = "." + detect.get_program_suffix()
+if env.get("no_suffix", False):
+    suffix = ""
 else:
-    suffix = "." + env["platform"]
+    if hasattr(detect, "get_program_suffix"):
+        suffix = "." + detect.get_program_suffix()
+    else:
+        suffix = "." + env["platform"]
 
-suffix += "." + env["target"]
-if env.dev_build:
-    suffix += ".dev"
+    suffix += "." + env["target"]
+    if env.dev_build:
+        suffix += ".dev"
 
-if env["precision"] == "double":
-    suffix += ".double"
+    if env["precision"] == "double":
+        suffix += ".double"
 
-suffix += "." + env["arch"]
+    suffix += "." + env["arch"]
 
-if not env["threads"]:
-    suffix += ".nothreads"
+    if not env["threads"]:
+        suffix += ".nothreads"
 
-suffix += env.extra_suffix
+    suffix += env.extra_suffix
 
 sys.path.remove(tmppath)
 sys.modules.pop("detect")
