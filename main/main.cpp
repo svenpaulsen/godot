@@ -3961,6 +3961,35 @@ void Main::stop_project() {
 	PropertyListHelper::clear_base_helpers();
 	ResourceLoader::clear_translation_remaps();
 
+	// Clear autoloads so they are properly re-registered on the next start().
+	// We must erase both the `autoloads` HashMap AND the `props` entries,
+	// because ProjectSettings::_set() has an early-return optimisation that
+	// skips add_autoload() when the value in `props` hasn't changed.
+	// Using set_setting(key, Variant()) triggers _set with NIL which erases
+	// from both `props` and `autoloads` in one shot.
+	if (ProjectSettings::get_singleton()) {
+		HashMap<StringName, ProjectSettings::AutoloadInfo> autoloads = ProjectSettings::get_singleton()->get_autoload_list();
+		for (const KeyValue<StringName, ProjectSettings::AutoloadInfo> &E : autoloads) {
+			for (int i = 0; i < ScriptServer::get_language_count(); i++) {
+				ScriptServer::get_language(i)->add_global_constant(E.value.name, Variant());
+			}
+		}
+		// Erase from props + autoloads via set_setting (must iterate a copy
+		// since set_setting mutates the autoloads map).
+		Vector<StringName> keys;
+		for (const KeyValue<StringName, ProjectSettings::AutoloadInfo> &E : autoloads) {
+			keys.push_back(E.key);
+		}
+		for (const StringName &key : keys) {
+			ProjectSettings::get_singleton()->set_setting("autoload/" + key, Variant());
+		}
+	}
+
+	// Clear global script classes so they don't leak between projects.
+	ScriptServer::global_classes_clear();
+	// If stale scripts remain an issue, a proper GDScriptCache::reset()
+	// method needs to be added to the engine.
+
 	// Reset counters for the next project run.
 	main_timer_sync.init(OS::get_singleton()->get_ticks_usec());
 	last_ticks = 0;
