@@ -46,7 +46,16 @@ GDExtensionObjectPtr libgodot_create_godot_instance(int p_argc, char *p_argv[], 
 	ERR_FAIL_COND_V_MSG(instance != nullptr, nullptr, "Only one Godot Instance may be created.");
 
 	uint32_t remaining_args = p_argc - 1;
-	os = new OS_MacOS_NSApp(p_argv[0], remaining_args, remaining_args > 0 ? &p_argv[1] : nullptr);
+
+	// When an external display server interface is registered, the host app
+	// already owns the NSApplication. Use the plain OS_MacOS to avoid
+	// replacing the shared NSApplication with GodotApplication (which
+	// overrides sendEvent: and breaks key equivalents like Cmd+C/V).
+	if (libgodot_display_server_get_interface() != nullptr) {
+		os = new OS_MacOS_Headless(p_argv[0], remaining_args, remaining_args > 0 ? &p_argv[1] : nullptr);
+	} else {
+		os = new OS_MacOS_NSApp(p_argv[0], remaining_args, remaining_args > 0 ? &p_argv[1] : nullptr);
+	}
 	_libgodot_apply_log_stdout();
 
 	@autoreleasepool {
