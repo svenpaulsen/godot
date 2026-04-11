@@ -23,7 +23,7 @@ ios_lib = env_ios.add_library("ios", ios_lib)
 env_ios.Append(CCFLAGS=["-fmodules", "-fcxx-modules"])
 
 combine_command = env_ios.CommandNoCache(
-    "#bin/libgodot" + env_ios["LIBSUFFIX"], [ios_lib] + env_ios["LIBS"], env.Run(combine_libs_apple_embedded)
+    env.bin_dir + "/libgodot" + env_ios["LIBSUFFIX"], [ios_lib] + env_ios["LIBS"], env.Run(combine_libs_apple_embedded)
 )
 
 if env["generate_bundle"]:

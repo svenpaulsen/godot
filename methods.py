@@ -96,16 +96,19 @@ def redirect_emitter(target, source, env):
     if not env["redirect_build_objects"]:
         return target, source
 
+    bin_dir_abs = Path(env.Dir(env.bin_dir).get_abspath()).resolve()
+    obj_dir = env.bin_dir + "/obj"
+
     redirected_targets = []
     for item in target:
         path = Path(item.get_abspath()).resolve()
 
-        if path.parent == base_folder / "bin":
+        if path.parent == bin_dir_abs:
             pass
         elif base_folder in path.parents:
-            item = env.File(f"#bin/obj/{path.relative_to(base_folder)}")
+            item = env.File(f"{obj_dir}/{path.relative_to(base_folder)}")
         elif (alt_base := Path(env.Dir(".").get_abspath()).resolve().parent) in path.parents:
-            item = env.File(f"#bin/obj/external/{path.relative_to(alt_base)}")
+            item = env.File(f"{obj_dir}/external/{path.relative_to(alt_base)}")
         else:
             print_warning(f'Failed to redirect "{path}"')
         redirected_targets.append(item)
