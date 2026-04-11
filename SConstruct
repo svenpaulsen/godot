@@ -315,6 +315,7 @@ opts.Add(
     )
 )
 opts.Add(BoolVariable("no_suffix", "Omit platform/target/arch suffix from output library name", False))
+opts.Add("bin_dir", "Override the output directory for built binaries (default: 'bin')", "bin")
 
 # Thirdparty libraries
 opts.Add(BoolVariable("builtin_brotli", "Use the built-in Brotli library", True))
@@ -369,6 +370,13 @@ opts.Add("cpp_compiler_launcher", "C++ compiler launcher (e.g. `ccache`)")
 # Update the environment to have all above options defined
 # in following code (especially platform and custom_modules).
 opts.Update(env)
+
+# Normalize bin_dir into a SCons-compatible path for use in platform SCsub files.
+# Absolute paths are used as-is; relative paths are anchored to the project root with '#'.
+if os.path.isabs(env["bin_dir"]):
+    env.bin_dir = env["bin_dir"]
+else:
+    env.bin_dir = "#" + env["bin_dir"]
 
 # Setup caching logic early to catch everything.
 methods.prepare_cache(env)
@@ -1244,6 +1252,11 @@ if env["tests"]:
 SConscript("main/SCsub")
 
 SConscript("platform/" + env["platform"] + "/SCsub")  # Build selected platform.
+
+# When bin_dir points outside the project tree, SCons won't build it by default.
+# Explicitly set the output directory as a default target.
+if env["bin_dir"] != "bin":
+    Default(env.bin_dir)
 
 # Microsoft Visual Studio Project Generation
 if env["vsproj"]:
