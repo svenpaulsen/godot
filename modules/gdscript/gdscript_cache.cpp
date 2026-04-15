@@ -495,6 +495,13 @@ void GDScriptCache::clear() {
 	singleton->static_gdscript_cache.clear();
 }
 
+void GDScriptCache::reset() {
+	clear();
+	if (singleton) {
+		singleton->cleared = false;
+	}
+}
+
 GDScriptCache::GDScriptCache() {
 	singleton = this;
 }
