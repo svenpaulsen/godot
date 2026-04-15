@@ -154,6 +154,7 @@
 
 #ifdef MODULE_GDSCRIPT_ENABLED
 #include "modules/gdscript/gdscript.h"
+#include "modules/gdscript/gdscript_cache.h"
 #if defined(TOOLS_ENABLED) && !defined(GDSCRIPT_NO_LSP)
 #include "modules/gdscript/language_server/gdscript_language_server.h"
 #endif // TOOLS_ENABLED && !GDSCRIPT_NO_LSP
@@ -4079,40 +4080,65 @@ void Main::stop_project() {
 		message_queue->flush();
 	}
 
+	// Flush pending rendering commands (node destructors queue free_rid calls
+	// on the RenderingServer command queue — without a sync those never execute).
+	if (rendering_server) {
+		rendering_server->sync();
+	}
+
+	// Clear global shader parameters that were set by the project.
+	if (rendering_server) {
+		rendering_server->global_shader_parameters_clear();
+	}
+
 	ResourceLoader::clear_thread_load_tasks();
 	ResourceLoader::remove_custom_loaders();
 	ResourceSaver::remove_custom_savers();
 	PropertyListHelper::clear_base_helpers();
 	ResourceLoader::clear_translation_remaps();
 
-	// Clear autoloads so they are properly re-registered on the next start().
-	// We must erase both the `autoloads` HashMap AND the `props` entries,
-	// because ProjectSettings::_set() has an early-return optimisation that
-	// skips add_autoload() when the value in `props` hasn't changed.
-	// Using set_setting(key, Variant()) triggers _set with NIL which erases
-	// from both `props` and `autoloads` in one shot.
+	// Clear all project-specific settings (autoloads, global groups, custom
+	// properties from project.godot). This prevents settings from one project
+	// leaking into the next (e.g. rendering/environment/defaults/default_environment).
 	if (ProjectSettings::get_singleton()) {
+		// First remove autoload global constants from script languages.
 		const HashMap<StringName, ProjectSettings::AutoloadInfo> &autoloads = ProjectSettings::get_singleton()->get_autoload_list();
 		for (const KeyValue<StringName, ProjectSettings::AutoloadInfo> &E : autoloads) {
 			for (int i = 0; i < ScriptServer::get_language_count(); i++) {
 				ScriptServer::get_language(i)->add_global_constant(E.value.name, Variant());
 			}
 		}
-		// Erase from props + autoloads via set_setting (must iterate a copy
-		// since set_setting mutates the autoloads map).
-		Vector<StringName> keys;
-		for (const KeyValue<StringName, ProjectSettings::AutoloadInfo> &E : autoloads) {
-			keys.push_back(E.key);
-		}
-		for (const StringName &key : keys) {
-			ProjectSettings::get_singleton()->set_setting("autoload/" + key, Variant());
-		}
+		// Then clear all non-builtin properties.
+		ProjectSettings::get_singleton()->clear_project_properties();
 	}
 
 	// Clear global script classes so they don't leak between projects.
 	ScriptServer::global_classes_clear();
-	// If stale scripts remain an issue, a proper GDScriptCache::reset()
-	// method needs to be added to the engine.
+
+	// Finish all script languages to break cyclic references between scripts
+	// and release all resources they hold (textures, scenes, etc.).
+	// GDScriptLanguage::finish() clears the script_list, breaks dependency
+	// cycles, and resets the finishing flag so the language is reusable.
+	for (int i = 0; i < ScriptServer::get_language_count(); i++) {
+		ScriptServer::get_language(i)->finish();
+	}
+#ifdef MODULE_GDSCRIPT_ENABLED
+	// Reset the GDScriptCache cleared flag so it works for the next project.
+	GDScriptCache::reset();
+#endif
+	// Note: ScriptServer::init_languages() is NOT called here — finish()
+	// already resets the finishing flag and GDScriptCache::reset() clears the
+	// cleared flag. The language remains registered and functional with an
+	// empty script list, ready for the next project to populate it.
+
+	// Sync again after script cleanup — resource destructors triggered by
+	// breaking cyclic script refs may have queued additional free_rid calls.
+	if (message_queue) {
+		message_queue->flush();
+	}
+	if (rendering_server) {
+		rendering_server->sync();
+	}
 
 	// Reset counters for the next project run.
 	main_timer_sync.init(OS::get_singleton()->get_ticks_usec());

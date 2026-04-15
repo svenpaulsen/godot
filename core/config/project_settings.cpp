@@ -1070,6 +1070,33 @@ void ProjectSettings::clear(const String &p_name) {
 	_queue_changed(p_name);
 }
 
+void ProjectSettings::clear_project_properties() {
+	Vector<StringName> to_erase;
+	for (KeyValue<StringName, VariantContainer> &E : props) {
+		if (E.value.order >= NO_BUILTIN_ORDER_BASE) {
+			// Non-builtin property added by project.godot — remove entirely.
+			to_erase.push_back(E.key);
+		} else if (E.value.initial.get_type() != Variant::NIL) {
+			// Builtin property overridden by project.godot — reset to initial.
+			E.value.variant = E.value.initial;
+		}
+	}
+	for (const StringName &key : to_erase) {
+		// Use set_setting with NIL to properly clean up autoloads, global groups etc.
+		set_setting(key, Variant());
+	}
+
+	custom_prop_info.clear();
+	custom_features.clear();
+	feature_overrides.clear();
+	global_groups.clear();
+	scene_groups_cache.clear();
+	global_class_list.clear();
+	is_global_class_list_loaded = false;
+	project_loaded = false;
+	last_order = NO_BUILTIN_ORDER_BASE;
+}
+
 Error ProjectSettings::save() {
 	Error error = save_custom(get_resource_path().path_join("project.godot"));
 	if (error == OK) {

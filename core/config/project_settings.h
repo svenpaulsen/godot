@@ -192,6 +192,7 @@ public:
 	static ProjectSettings *get_singleton();
 
 	void clear(const String &p_name);
+	void clear_project_properties();
 	int get_order(const String &p_name) const;
 	void set_order(const String &p_name, int p_order);
 	void set_builtin_order(const String &p_name);

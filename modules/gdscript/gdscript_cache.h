@@ -129,6 +129,7 @@ public:
 	static void remove_static_script(const String &p_fqcn);
 
 	static void clear();
+	static void reset();
 
 	GDScriptCache();
 	~GDScriptCache();
