@@ -3956,6 +3956,11 @@ void Main::stop_project() {
 		message_queue->flush();
 	}
 
+	// Stop all audio playbacks so they release their AudioStream references.
+	if (AudioServer::get_singleton()) {
+		AudioServer::get_singleton()->stop_all_streams();
+	}
+
 	// Flush pending rendering commands (node destructors queue free_rid calls
 	// on the RenderingServer command queue — without a sync those never execute).
 	if (rendering_server) {
@@ -4006,6 +4011,12 @@ void Main::stop_project() {
 	// already resets the finishing flag and GDScriptCache::reset() clears the
 	// cleared flag. The language remains registered and functional with an
 	// empty script list, ready for the next project to populate it.
+
+	// Stop audio streams again — script variables (e.g. AudioManager autoload)
+	// may have held references to streams that are only released after finish().
+	if (AudioServer::get_singleton()) {
+		AudioServer::get_singleton()->stop_all_streams();
+	}
 
 	// Sync again after script cleanup — resource destructors triggered by
 	// breaking cyclic script refs may have queued additional free_rid calls.

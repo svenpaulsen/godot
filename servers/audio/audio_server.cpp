@@ -1308,6 +1308,31 @@ void AudioServer::stop_playback_stream(Ref<AudioStreamPlayback> p_playback) {
 	} while (!playback_node->state.compare_exchange_strong(old_state, new_state));
 }
 
+void AudioServer::stop_all_streams() {
+	// Lock the audio driver so it doesn't iterate the list concurrently.
+	lock();
+
+	// Delete all active playbacks immediately (not deferred).
+	for (AudioStreamPlaybackListNode *playback : playback_list) {
+		_delete_stream_playback_list_node(playback);
+	}
+
+	// Also stop sample playbacks.
+	for (const Ref<AudioSamplePlayback> &sp : sample_playback_list) {
+		if (sp.is_valid()) {
+			AudioDriver::get_singleton()->stop_sample_playback(sp);
+		}
+	}
+	sample_playback_list.clear();
+
+	unlock();
+
+	// Force the SafeList to process the deferred destructors now.
+	// Call twice — SafeList moves items through a graveyard stage.
+	_cleanup_lists();
+	_cleanup_lists();
+}
+
 void AudioServer::set_playback_bus_exclusive(Ref<AudioStreamPlayback> p_playback, const StringName &p_bus, Vector<AudioFrame> p_volumes) {
 	ERR_FAIL_COND(p_volumes.size() != MAX_CHANNELS_PER_BUS);
 
