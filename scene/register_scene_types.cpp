@@ -370,6 +370,8 @@ static Ref<ResourceFormatSaverText> resource_saver_text;
 static Ref<ResourceFormatLoaderText> resource_loader_text;
 
 static Ref<ResourceFormatLoaderCompressedTexture2D> resource_loader_stream_texture;
+#include "scene/resources/resource_format_loader_raw.h"
+static Ref<ResourceFormatLoaderRaw> resource_loader_raw;
 static Ref<ResourceFormatLoaderCompressedTextureLayered> resource_loader_texture_layered;
 static Ref<ResourceFormatLoaderCompressedTexture3D> resource_loader_texture_3d;
 
@@ -408,6 +410,12 @@ void register_scene_types() {
 
 	resource_loader_text.instantiate();
 	ResourceLoader::add_resource_format_loader(resource_loader_text, true);
+
+	// Raw asset loader: loads PNG, JPG, MP3, WAV, TTF directly without the
+	// editor import pipeline. Registered last (not first) so that imported
+	// assets always take precedence when available.
+	resource_loader_raw.instantiate();
+	ResourceLoader::add_resource_format_loader(resource_loader_raw);
 
 	if constexpr (GD_IS_CLASS_ENABLED(Shader)) {
 		resource_saver_shader.instantiate();
@@ -1443,6 +1451,9 @@ void unregister_scene_types() {
 
 	ResourceLoader::remove_resource_format_loader(resource_loader_text);
 	resource_loader_text.unref();
+
+	ResourceLoader::remove_resource_format_loader(resource_loader_raw);
+	resource_loader_raw.unref();
 
 	if constexpr (GD_IS_CLASS_ENABLED(Shader)) {
 		ResourceSaver::remove_resource_format_saver(resource_saver_shader);
