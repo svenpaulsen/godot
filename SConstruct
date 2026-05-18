@@ -913,6 +913,25 @@ else:
     # Allow use of `__cplusplus` macro to determine C++ standard universally.
     env.Prepend(CXXFLAGS=["/Zc:__cplusplus"])
 
+# Shared library symbol visibility. On GCC/Clang the default is to export every
+# non-static symbol, which leaks the entire engine's C++ ABI out of libgodot.
+# Hide everything by default so only symbols explicitly annotated with
+# LIBGODOT_API (visibility("default")) are exported. MSVC already hides symbols
+# by default and relies on __declspec(dllexport), so no flag is needed there.
+#
+# As a second safety net, an explicit linker allowlist restricts exports to the
+# libgodot_* API only. This overrides bundled thirdparty libraries (FreeType,
+# ZSTD, etc.) that mark their own symbols visibility("default") via headers,
+# preventing them from colliding with system copies loaded by host apps (e.g.
+# GTK's gdk_pixbuf pulling in system libpng).
+if env["library_type"] == "shared_library" and not env.msvc:
+    env.Append(CCFLAGS=["-fvisibility=hidden"])
+    env.Append(CXXFLAGS=["-fvisibility-inlines-hidden"])
+    if env["platform"] == "macos":
+        env.Append(LINKFLAGS=["-Wl,-exported_symbols_list,platform/macos/libgodot.symbols"])
+    elif env["platform"] == "linuxbsd":
+        env.Append(LINKFLAGS=["-Wl,--version-script=platform/linuxbsd/libgodot.ld"])
+
 # Disable exception handling. Godot doesn't use exceptions anywhere, and this
 # saves around 20% of binary size and very significant build time (GH-80513).
 if env["disable_exceptions"]:

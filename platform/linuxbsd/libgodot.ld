@@ -1,0 +1,6 @@
+{
+    global:
+        libgodot_*;
+    local:
+        *;
+};
