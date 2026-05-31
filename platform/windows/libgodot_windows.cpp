@@ -73,6 +73,8 @@ void libgodot_destroy_godot_instance(GDExtensionObjectPtr p_godot_instance) {
 		memdelete(godot_instance);
 		instance = nullptr;
 		Main::cleanup();
+		delete os;
+		os = nullptr;
 	}
 }
 
